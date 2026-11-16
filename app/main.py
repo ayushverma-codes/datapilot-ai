@@ -17,7 +17,9 @@ from app.conversation.memory import ConversationService
 from app.conversation.memory_contracts import ConversationCreate, ConversationMessageRequest, ConversationUpdate
 from app.conversation.retail_contracts import RetailQuestion
 from app.retail_bi import answer_retail_question, catalog as retail_metric_catalog
+from app.retail_contracts import DatasetPair, MetricsRequest, NormalizationRequest, RelationshipRequest
 from app.services.ingestion_service import IngestionService, UploadInput
+from app.services.retail_service import RetailService
 
 
 class Proposal(Contract):
@@ -78,6 +80,7 @@ def create_app(settings=None):
     settings = settings or Settings()
     service = IngestionService(settings)
     conversations = ConversationService(service, settings)
+    retail = RetailService(service)
 
     @asynccontextmanager
     async def lifespan(app):
@@ -237,6 +240,32 @@ def create_app(settings=None):
     @api.post('/api/v1/assistant/retail/query')
     def assistant_retail_query(body: RetailQuestion, user=Depends(identity)):
         return answer_retail_question(body.question, settings)
+
+    @api.post('/api/v1/retail/normalization')
+    def normalize_retail(body: NormalizationRequest, user=Depends(identity)):
+        return retail.normalize(user, body)
+
+    @api.post('/api/v1/retail/metrics')
+    def compute_retail_metrics(body: MetricsRequest, user=Depends(identity)):
+        return retail.metrics(user, body)
+
+    @api.post('/api/v1/retail/relationships/discover')
+    def discover_relationships(body: DatasetPair, user=Depends(identity)):
+        return retail.discover(user, body)
+
+    @api.post('/api/v1/retail/relationships')
+    def register_relationship(body: RelationshipRequest, user=Depends(identity)):
+        return retail.register(user, body)
+
+    @api.get('/api/v1/retail/relationships')
+    def list_relationships(offset: int = Query(0, ge=0, le=2_000_000_000), limit: int = Query(50, ge=1, le=100),
+                           user=Depends(identity)):
+        return {'relationships': retail.relationships(user, offset, limit)}
+
+    @api.get('/api/v1/retail/relationships/{relationship_id}/preview')
+    def preview_relationship(relationship_id: str, offset: int = Query(0, ge=0), limit: int = Query(50, ge=1, le=100),
+                             user=Depends(identity)):
+        return retail.preview(user, relationship_id, offset, limit)
 
     return api
 

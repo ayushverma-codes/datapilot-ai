@@ -108,6 +108,12 @@ class ValidationReport(Record, Base):
     payload: Mapped[dict] = mapped_column(JSON)
 
 
+class RetailRelationship(Record, Base):
+    __tablename__ = "retail_relationships"
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
+    payload: Mapped[dict] = mapped_column(JSON)
+
+
 class Conversation(Record, Base):
     __tablename__ = "conversations"
     __table_args__ = (Index("ix_conversations_user_updated", "user_id", "updated_at"),)
