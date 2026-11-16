@@ -1,9 +1,12 @@
 import json
+import re
 from uuid import NAMESPACE_URL, uuid5
 from app.models.contracts import Step
 from app.cleaning.transformation_registry import REGISTRY, validate_operation
 
 RISK_LEVELS = ['low', 'medium', 'high']
+# Common UTF-8 bytes misread as Windows-1252, or a decoder replacement character.
+SUSPECT_TEXT = re.compile(r'[\ufffd\x80-\x9f]|[ÃÂ][\u00a0-\u00bf]|â[€™€]')
 ISSUE_CATEGORIES = {
     'convert_numeric': {'mixed_types', 'invalid_numeric'},
     'parse_dates': {'invalid_dates', 'ambiguous_dates', 'inconsistent_date_formats'},
@@ -15,6 +18,22 @@ ISSUE_CATEGORIES = {
 def related_issue_ids(issues, operation, columns):
     return [issue.id for issue in issues if issue.column in columns and
             (issue.recommended_action == operation or issue.category in ISSUE_CATEGORIES.get(operation, ()))]
+
+
+def case_mapping(groups):
+    mapping = {}
+    for group in groups:
+        if any(len(value) >= 200 or SUSPECT_TEXT.search(value) for value in group):
+            continue
+        trimmed = {value.strip() for value in group}
+        if not trimmed or any(not value or any(ord(char) < 32 for char in value) for value in trimmed):
+            continue
+        if len({value.casefold() for value in trimmed}) != 1:
+            continue
+        # Whitespace is applied earlier. Preserve lexical selection among cleaned spellings.
+        canonical = min(trimmed)
+        mapping.update({value: canonical for value in sorted(trimmed - {canonical})})
+    return mapping
 
 
 def generate_plan(file_id, profile, issues, suggestions, overrides=None):
@@ -57,8 +76,7 @@ def generate_plan(file_id, profile, issues, suggestions, overrides=None):
         if issue.category == 'potential_outliers':
             add('flag_outliers', [issue.column], {}, 'Statistical outliers may be legitimate; retain values', issue_ids=[issue.id])
         if issue.category == 'case_inconsistency':
-            mapping = {v: group[0] for group in issue.evidence if all(len(value) < 200 for value in group)
-                       for v in group if v != group[0]}
+            mapping = case_mapping(issue.evidence)
             if mapping:
                 add('category_normalization', [issue.column], {'mapping': mapping}, 'Review possible case-equivalent categories', issue_ids=[issue.id])
     for suggestion in suggestions:

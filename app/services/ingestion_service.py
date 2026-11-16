@@ -371,6 +371,11 @@ class IngestionService:
                 after = generate_profile(working, cleaned_metadata, len(content))
                 remaining = detect(after, file.run_id, file.id)
                 report = validate(before, after, original, working, executed, logs, remaining)
+                report['executed_steps'] = [
+                    {'step_id': step.id, 'operation': step.operation, 'columns': step.columns,
+                     'status': log['status'], 'rows_affected': log['rows_affected']}
+                    for step, log in zip(executed, logs)
+                ]
                 # Also verify exact CSV round trip before publishing.
                 if not roundtrip.reset_index(drop=True).equals(working.reset_index(drop=True)):
                     report['passed'] = False

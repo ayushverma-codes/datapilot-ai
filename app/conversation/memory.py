@@ -217,7 +217,48 @@ class ConversationService:
                        'query_result_reference': item.query_result_reference}
                       for item in messages]
             return {'context': context, 'recent_messages': recent,
+                    'context_version': conversation.context_version,
                     'window_message_count': len(recent)}
+
+    def record_analysis(self, session, user_id, trace, turn):
+        """Commit the verified trace, both messages and the context update together."""
+        conversation_id = trace['conversation']['conversation_id']
+        conversation = self._owned(session, user_id, conversation_id)
+        before = turn['context'].model_dump(mode='json')
+        after = before
+        old_version = turn['context_version']
+        answered = trace['status'] == 'ANSWERED'
+        values = {}
+        if answered:
+            source = trace['evidence']['source_datasets']['left']
+            join = trace['evidence']['join']
+            after = AnalyticalContext(
+                active_file_id=source['file_id'], analytics_domain='generic_csv',
+                analysis={'source': source, 'relationship_id': join['relationship_id'] if join else None,
+                          'plan': trace['validated_plan'], 'result': trace['result_preview'],
+                          'trace_id': trace['trace_id']},
+                last_successful_query_id=trace['trace_id']).model_dump(mode='json')
+            values.update(context=after, context_version=old_version + 1, active_file_id=source['file_id'],
+                          active_analytics_domain='generic_csv')
+            if conversation.title == 'New conversation':
+                values['title'] = trace['question'][:120]
+        now = _now()
+        changed = session.execute(update(Conversation).where(
+            Conversation.id == conversation_id, Conversation.user_id == user_id,
+            Conversation.context_version == old_version).values(updated_at=now, last_message_at=now, **values))
+        if changed.rowcount != 1:
+            raise PipelineError('CONVERSATION_CONFLICT', 'The conversation changed during this turn. Retry the question.', 409)
+        trace['conversation']['context_version_after'] = old_version + int(answered)
+        message_type = {'NEEDS_CLARIFICATION': 'CLARIFICATION', 'ANSWERED': 'ANSWER'}.get(trace['status'], 'ERROR')
+        reference = {'trace_id': trace['trace_id'], 'status': trace['status']}
+        session.add_all([
+            ConversationMessage(id=_uid(), conversation_id=conversation_id, role='user', content=trace['question'],
+                                message_type='TEXT', structured_context=before, query_result_reference=reference),
+            ConversationMessage(id=_uid(), conversation_id=conversation_id, role='assistant',
+                                content=trace['answer'] or 'No analytical answer is available.',
+                                message_type=message_type, structured_context=after,
+                                query_result_reference=reference, error=trace['error']),
+        ])
 
     def validate_context(self, user_id, context):
         if context.analytics_domain == 'olist_retail':

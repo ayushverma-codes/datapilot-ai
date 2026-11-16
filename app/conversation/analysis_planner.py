@@ -127,6 +127,11 @@ def fallback(question, alias, source, context):
                             group_by={'column': plan['group_by']} if plan.get('group_by') else None)
 
     count = r'(?:how many|count|number of) (?:rows|records|entries)'
+    grouped = re.fullmatch(rf'show ({names}) (?:by|per) ({names})', text, re.I)
+    if grouped and columns[exact(grouped[1])] == 'numeric':
+        return AnalysisPlan(intent='aggregate', **select, operation='sum',
+                            column={'column': exact(grouped[1])}, group_by={'column': exact(grouped[2])},
+                            filters=filters)
     agg = rf'(?:what is (?:the )?)?(?:(sum|total|average|avg|mean|minimum|min|maximum|max) (?:of )?({names})|(?:count distinct|how many (?:distinct|unique)) ({names})(?: values)?)'
     group = rf'(?: (?:by|per) ({names}))?'
     match = re.fullmatch(rf'(?:{count}|{agg}){group}', text, re.I)

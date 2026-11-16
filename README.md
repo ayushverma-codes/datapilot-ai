@@ -18,6 +18,7 @@ There is no frontend in this release. Use the API and its OpenAPI page at `/docs
 
 - [Module 1 — Data ingestion and preprocessing](Reports/MODULE_1_COMPLETION_REPORT.md)
 - [Module 2 — Data profiling and quality assessment](Reports/MODULE_2_COMPLETION_REPORT.md)
+- [Module 6 — Multi-turn conversational memory](Reports/MODULE_6_COMPLETION_REPORT.md)
 
 ## Architecture
 
@@ -44,6 +45,16 @@ No arbitrary model-generated Python or SQL is executed. Generic CSV analytics ar
 `Question → context resolution → optional planner → structured plan → schema/allow-list validation → deterministic execution → result verification → answer and evidence`
 
 Conversation context and messages are persisted in the SQLAlchemy database. Follow-ups use stored structured context and a bounded recent-message window; clarification or failed queries do not replace the last successful analytical context. The deterministic follow-up resolver does not send stored conversation history to an AI provider.
+
+### Multi-turn analysis of uploaded CSVs
+
+1. Open `/docs` and click **Authorize**. Enter the configured DataPilot API token.
+2. Use `POST /api/v1/ingestion/upload` to choose CSV files, then call `POST /api/v1/files/{file_id}/clean` for each file to produce a validated revision.
+3. Create a session with `POST /api/v1/conversations`. Send the first analytical turn to `POST /api/v1/assistant/query` with the returned `conversation_id`, a question and `datasets: [{"file_id": "<file ID>"}]`.
+4. Send follow-ups to the same query endpoint with the same `conversation_id`. For a dataset with `revenue`, `region`, and `category` columns, try `Show revenue by region`, `Filter to West`, then `Now show the top five categories`. To switch datasets, select the new file and state the new analysis.
+5. Inspect `GET /api/v1/conversations/{id}` for the message history and current plan, and `GET /api/v1/assistant/traces/{trace_id}` for the previous plan, context edit and execution evidence. If the dataset was cleaned again, select the new revision explicitly and start a new analysis.
+
+The existing conversation message endpoint remains available for the Olist catalog and the legacy CSV workflow. The assistant query endpoint stores its own verified analytical turns in the same conversation history.
 
 ## API overview
 

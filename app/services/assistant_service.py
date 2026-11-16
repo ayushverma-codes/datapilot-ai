@@ -11,6 +11,7 @@ from app.conversation.analysis_contracts import AnalysisPlan, DatasetSelection
 from app.conversation.analysis_planner import SYSTEM, choose_dataset, fallback, ground
 from app.conversation.analysis_tools import run_tools, validate_tools
 from app.conversation.assistant import answer_question, request_plan
+from app.conversation.followup import FOLLOWUP, resolve, strip_source
 from app.models.contracts import PipelineError
 from app.retail_engine import require_base_grain
 from app.storage.database import AssistantTrace, SchemaProfile, User, ValidationReport
@@ -153,7 +154,7 @@ class AssistantService:
                 'generated_plan': None, 'validated_plan': None, 'planner': None, 'operations': [],
                 'evidence': {}, 'result_preview': None, 'answer': None, 'error': None, 'execution': 'NOT_STARTED'}
 
-    def _save(self, user, trace):
+    def _save(self, user, trace, turn=None):
         with self.ingestion.lock, self.ingestion.sessions() as session:
             if session.get(User, user) is None:
                 try:
@@ -162,6 +163,8 @@ class AssistantService:
                         session.flush()
                 except IntegrityError:
                     pass
+            if turn:
+                self.conversations.record_analysis(session, user, trace, turn)
             session.add(AssistantTrace(id=trace['trace_id'], user_id=user, payload=trace))
             session.commit()
 
@@ -208,12 +211,6 @@ class AssistantService:
                                           'schema': _schema(profile.payload), 'rows': profile.payload['row_count']}
         return relations
 
-    def _context(self, user, request):
-        if not request.conversation_id:
-            return None
-        context = self.conversations.build_context(user, request.conversation_id)['context']
-        return context
-
     def _choose_plan(self, question, datasets, relations, context, alias, trace, transport):
         payload = ground(question, datasets, relations, context)
         payload['selected_dataset'] = alias
@@ -228,39 +225,62 @@ class AssistantService:
             trace['plan_source'] = 'AI'
         else:
             trace['plan_source'] = 'RULES'
-            plan = fallback(question, alias, datasets[alias], context)
+            plan = fallback(strip_source(question, alias, datasets[alias]['evidence']['filename']),
+                            alias, datasets[alias], context)
         return plan, payload
 
-    def _execute(self, user, request, trace, transport):
-        context = self._context(user, request)
+    def _execute(self, user, request, trace, transport, context=None):
         options = request.datasets
         if not options and context and context.active_file_id:
-            options = [DatasetSelection(file_id=context.active_file_id)]
+            revision = context.analysis.source['revision'] if context.analysis else None
+            options = [DatasetSelection(file_id=context.active_file_id, revision=revision)]
         datasets = {f'd{index}': self._entry(user, selection) for index, selection in enumerate(options, 1)}
         trace['selected_sources'] = {key: item['evidence'] for key, item in datasets.items()}
         active_alias = next((key for key, item in datasets.items()
                              if context and item['evidence']['file_id'] == context.active_file_id), None)
         compact = None
-        if active_alias and context.generic_query:
+        if active_alias and context.generic_query and not context.analysis:
             compact = {'dataset': active_alias, 'query': context.generic_query.model_dump()}
             trace['context_reference'] = {'conversation_id': request.conversation_id,
                                           'last_query_id': context.last_successful_query_id}
-        relations = self._relations(user, request.relationship_ids, datasets)
         alias = choose_dataset(request.question, datasets, active_alias)
         if not alias:
             trace.update(intent='clarify', status='NEEDS_CLARIFICATION', answer='Which cleaned dataset should I use?')
             return
-        plan, payload = self._choose_plan(request.question, datasets, relations, compact, alias, trace, transport)
+        entry = datasets[alias]
+        question = strip_source(request.question, alias, entry['evidence']['filename'])
+        prior = context.analysis if context else None
+        same_snapshot = bool(prior and alias == active_alias and
+                             prior.source['artifact_id'] == entry['evidence']['artifact_id'])
+        relation_ids = request.relationship_ids
+        followup = bool(prior and FOLLOWUP.search(question))
+        if followup and same_snapshot and prior.relationship_id and not relation_ids:
+            relation_ids = [prior.relationship_id]
+        relations = self._relations(user, relation_ids, datasets)
+        if followup:
+            relation = next((key for key, value in relations.items()
+                             if value['registry']['relationship_id'] == prior.relationship_id), None)
+            compatible = same_snapshot and (not prior.relationship_id or relation is not None)
+            plan, edit = resolve(question, prior.plan if compatible else None, alias, entry['evidence']['revision'],
+                                 relation, entry['schema'], prior.result)
+            trace['plan_source'] = 'CONVERSATION_RULES'
+            trace['context_resolution'] = {'operation': edit, 'previous_trace_id': prior.trace_id,
+                                           'previous_plan': prior.plan.model_dump(mode='json')}
+        else:
+            plan, payload = self._choose_plan(question, datasets, relations, compact, alias, trace, transport)
+            if prior:
+                trace['context_resolution'] = {'operation': 'new_analysis' if same_snapshot else 'change_dataset_or_revision',
+                                               'previous_trace_id': prior.trace_id}
         trace['intent'] = plan.intent
         trace['proposed_plan'] = plan.model_dump(mode='json')
         if plan.intent in ('clarify', 'unsupported'):
             trace.update(status='NEEDS_CLARIFICATION' if plan.intent == 'clarify' else 'UNSUPPORTED',
-                         answer=('Specify an exact field, operation and any filters or comparison values.'
+                         answer=(('Which exact field or value should I use, or should I repeat the previous analysis?'
+                                  if followup else 'Specify an exact field, operation and any filters or comparison values.')
                                  if plan.intent == 'clarify' else 'The requested analysis is unsupported by the available tools.'))
             return
         if plan.dataset != alias:
             raise PipelineError('INVALID_QUERY_PLAN', 'The plan selected a different dataset than the question')
-        entry = datasets[alias]
         if plan.revision != entry['evidence']['revision']:
             raise _conflict()
         relation = relations.get(plan.relationship) if plan.relationship else None
@@ -306,7 +326,7 @@ class AssistantService:
         trace['evidence']['records_considered'] = result['rows_matched']
         trace.update(status=status, answer=answer, result_preview=result, execution='VERIFIED')
 
-    def _complete(self, user, trace, run):
+    def _complete(self, user, trace, run, turn=None):
         try:
             return run()
         except PipelineError as exc:
@@ -323,12 +343,23 @@ class AssistantService:
             raise PipelineError('ASSISTANT_EXECUTION_FAILED', 'Assistant execution failed', 500,
                                 {'trace_id': trace['trace_id']}) from exc
         finally:
-            self._save(user, trace)
+            try:
+                self._save(user, trace, turn)
+            except PipelineError as exc:
+                trace.update(status='FAILED', error=exc.as_dict(), answer=exc.message)
+                self._save(user, trace)
+                raise PipelineError(exc.code, exc.message, exc.status, {'trace_id': trace['trace_id']}) from exc
 
     def analyze(self, user, request, transport=None):
         trace = self._start(request.question)
         trace['requested_scope'] = request.model_dump(mode='json', exclude={'question'})
-        self._complete(user, trace, lambda: self._execute(user, request, trace, transport))
+        turn = None
+        if request.conversation_id:
+            turn = self.conversations.build_context(user, request.conversation_id, message_limit=0)
+            trace['conversation'] = {'conversation_id': request.conversation_id,
+                                     'context_version_before': turn['context_version']}
+        self._complete(user, trace, lambda: self._execute(
+            user, request, trace, transport, turn['context'] if turn else None), turn)
         return {'trace_id': trace['trace_id'], 'status': trace['status'], 'intent': trace['intent'],
                 'plan': trace['validated_plan'], 'result': trace['result_preview'],
                 'answer': trace['answer'], 'evidence': trace['evidence']}

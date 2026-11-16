@@ -3,9 +3,10 @@ import hmac
 import logging
 from contextlib import asynccontextmanager
 from typing import Any
-from fastapi import APIRouter, Depends, FastAPI, File, Form, Header, Query, UploadFile
+from fastapi import APIRouter, Depends, FastAPI, File, Form, Header, Query, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.routing import APIRoute
+from fastapi.security import HTTPBearer
 from pydantic import Field
 from starlette.concurrency import run_in_threadpool
 from starlette.exceptions import HTTPException
@@ -103,9 +104,12 @@ def create_app(settings=None):
         detail = exc.detail if isinstance(exc.detail, dict) else {'code': 'HTTP_ERROR', 'message': str(exc.detail), 'details': {}}
         return JSONResponse(status_code=exc.status_code, content={'error': detail})
 
-    def identity(authorization: str | None = Header(default=None)):
-        if authorization and authorization.startswith('Bearer '):
-            token = authorization[7:]
+    bearer = HTTPBearer(auto_error=False, description='Enter the configured DataPilot API token.')
+
+    def identity(request: Request, credentials=Depends(bearer)):
+        authorization = request.headers.get('authorization')
+        if credentials and authorization and authorization.startswith('Bearer '):
+            token = credentials.credentials
             for configured, user in settings.api_tokens.items():
                 if hmac.compare_digest(token, configured):
                     return user
@@ -120,7 +124,10 @@ def create_app(settings=None):
     upload_router = APIRouter(route_class=UploadRoute)
 
     @upload_router.post('/api/v1/ingestion/upload', status_code=201)
-    async def upload(files: list[UploadFile] = File(...), delimiter: str | None = Query(None, max_length=1),
+    async def upload(files: list[UploadFile] = File(
+                         ..., description='Select one or more CSV files.',
+                         json_schema_extra={'items': {'type': 'string', 'format': 'binary'}}),
+                     delimiter: str | None = Query(None, max_length=1),
                      descriptions: list[str] | None = Form(
                          None, description='One description per file, in upload order. Use an empty value to omit one.'),
                      idempotency_key: str | None = Header(None), user=Depends(identity)):

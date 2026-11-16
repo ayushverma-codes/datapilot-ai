@@ -2,6 +2,7 @@ from typing import Any, Literal
 
 from pydantic import Field, field_validator, model_validator
 
+from app.conversation.analysis_contracts import AnalysisPlan
 from app.conversation.contracts import QueryFilter
 from app.models.contracts import Contract
 
@@ -61,8 +62,17 @@ class GenericQueryContext(Contract):
     filters: list[QueryFilter] = Field(default_factory=list, max_length=20)
 
 
+class VerifiedAnalysis(Contract):
+    source: dict[str, Any]
+    relationship_id: str | None = None
+    plan: AnalysisPlan
+    result: dict[str, Any]
+    trace_id: str
+
+
 class AnalyticalContext(Contract):
     active_file_id: str | None = Field(default=None, max_length=64)
+    analysis: VerifiedAnalysis | None = None
     analytics_domain: Literal['generic_csv', 'olist_retail'] | None = None
     metric: dict[str, str] | None = None
     aggregation_operation: str | None = Field(default=None, max_length=40)
