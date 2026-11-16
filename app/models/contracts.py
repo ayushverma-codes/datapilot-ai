@@ -55,7 +55,13 @@ class Suggestion(Contract):
 
 
 class AIResponse(Contract):
-    suggestions: list[Suggestion] = Field(default_factory=list, max_length=30)
+    suggestions: list[Suggestion] = Field(max_length=30)
+    interpretations: list["ColumnInterpretation"] = Field(default_factory=list, max_length=20)
+
+
+class ColumnInterpretation(Contract):
+    column: str
+    interpretation: str = Field(min_length=1, max_length=300)
 
 
 class PipelineError(Exception):

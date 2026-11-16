@@ -18,19 +18,20 @@ class FileStorage:
 
     def write(self, path: Path, content: bytes, immutable=False):
         path.parent.mkdir(parents=True, exist_ok=True)
-        if immutable:
-            with path.open("xb") as stream:
-                stream.write(content)
-                stream.flush()
-                os.fsync(stream.fileno())
-            return
-        temp = path.with_name(path.name + "." + uuid4().hex + ".tmp")
+        temp = path.with_name(uuid4().hex[:16] + ".tmp")
         try:
             with temp.open("xb") as stream:
                 stream.write(content)
                 stream.flush()
                 os.fsync(stream.fileno())
-            os.replace(temp, path)
+            if immutable:
+                # Publish the fully written file atomically and fail if the name already exists.
+                if os.name == 'nt':
+                    os.rename(temp, path)  # On Windows rename also refuses an existing destination.
+                else:
+                    os.link(temp, path)
+            else:
+                os.replace(temp, path)
         finally:
             temp.unlink(missing_ok=True)
 

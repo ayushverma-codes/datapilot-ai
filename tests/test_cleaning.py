@@ -103,6 +103,10 @@ def test_high_risk_blocked(service, ingest):
     with pytest.raises(PipelineError) as exc:
         service.decide('alice', [step['id']], 'APPROVED')
     assert exc.value.code == 'HIGH_RISK_BLOCKED'
+    proposed = service.propose('alice', file_id, 'trim_whitespace', ['x'], {}, 'Review')
+    with pytest.raises(PipelineError) as exc:
+        service.decide('alice', [proposed['id']], 'APPROVED')
+    assert exc.value.code == 'HIGH_RISK_BLOCKED'
 
 
 def test_interacting_steps_remove_new_duplicates(service, ingest):
@@ -112,3 +116,73 @@ def test_interacting_steps_remove_new_duplicates(service, ingest):
     report = service.clean('alice', file_id)
     assert report['passed'] and report['idempotent']
     assert report['row_count_after'] == 1
+
+
+def test_failed_operation_cannot_disappear_from_later_revision(service, ingest):
+    file_id = ingest(b'x,y\n1, A \noops,b\n')
+    failed = service.propose('alice', file_id, 'convert_numeric', ['x'], {}, 'Review')
+    service.decide('alice', [failed['id']], 'APPROVED')
+    first = service.clean('alice', file_id)
+    assert not first['passed'] and first['failed_steps'] == [failed['id']]
+    added = service.propose('alice', file_id, 'normalize_strings', ['y'], {'mode': 'lower'}, 'Review')
+    service.decide('alice', [added['id']], 'APPROVED')
+    second = service.clean('alice', file_id)
+    assert not second['passed'] and second['failed_steps'] == [failed['id']]
+    with pytest.raises(PipelineError):
+        service.download('alice', file_id)
+
+
+def test_generated_ids_and_revision_artifacts(service, ingest):
+    from app.cleaning.plan_generator import generate_plan
+    from app.models.contracts import Issue
+
+    raw = b'label,value\n Blue ,1\nBlue,1\nGreen,\n'
+    file_id = ingest(raw)
+    profile = service.get_profile('alice', file_id)
+    issues = [Issue.model_validate(item) for item in service.get_issues('alice', file_id)]
+    first = generate_plan(file_id, profile, issues, [])
+    second = generate_plan(file_id, profile, list(reversed(issues)), [])
+    assert {s.id for s in first} == {s.id for s in second}
+    planned = service.get_plan('alice', file_id)['steps']
+    assert any(s['issue_ids'] and s['status'] == 'AUTO_APPROVED' for s in planned)
+    result = service.clean('alice', file_id)
+    assert result['passed'] and result['idempotent'] and result['row_count_after'] == 2
+    assert result['null_counts_before'] == result['null_counts_after'] == {'label': 0, 'value': 1}
+    assert any(issue['category'] == 'missing_values' for issue in result['unresolved_issues'])
+    assert next(service.settings.storage_dir.rglob(f'raw/{file_id}.csv')).read_bytes() == raw
+    run_file = service.report('alice', profile['run_id'])['files'][0]
+    assert all(log['approval_status'] == 'AUTO_APPROVED' for log in run_file['execution_logs'])
+    assert service.download('alice', file_id).read_bytes() == b'label,value\nBlue,1\nGreen,\n'
+    assert service.clean('alice', file_id) == result
+
+
+def test_immutable_artifact_is_published_complete_and_never_replaced(service):
+    path = service.settings.storage_dir / 'artifact.csv'
+    service.storage.write(path, b'complete', immutable=True)
+    with pytest.raises(FileExistsError):
+        service.storage.write(path, b'replacement', immutable=True)
+    assert path.read_bytes() == b'complete'
+    assert list(path.parent.glob('*.tmp')) == []
+
+
+def test_numeric_expansion_is_bounded(service, ingest):
+    raw = b'value,label\n1e-1000000000,a\n2.0,b\n'
+    file_id = ingest(raw)
+    numeric = next(s for s in service.get_plan('alice', file_id)['steps'] if s['operation'] == 'convert_numeric')
+    service.decide('alice', [numeric['id']], 'APPROVED')
+    report = service.clean('alice', file_id)
+    assert not report['passed'] and report['failed_steps'] == [numeric['id']]
+    assert next(service.settings.storage_dir.rglob(f'raw/{file_id}.csv')).read_bytes() == raw
+
+
+def test_outlier_flagging_preserves_values(service, ingest):
+    raw = b'value\n1.0\n2.0\n3.0\n4.0\n5.0\n6.0\n1000.0\n'
+    file_id = ingest(raw)
+    profile = service.get_profile('alice', file_id)
+    report = service.clean('alice', file_id)
+    assert report['passed'] and report['row_count_after'] == 7
+    assert service.download('alice', file_id).read_bytes() == raw
+    assert any(i['category'] == 'potential_outliers' for i in report['unresolved_issues'])
+    logs = service.report('alice', profile['run_id'])['files'][0]['execution_logs']
+    flag = next(log for log in logs if log['operation'] == 'flag_outliers')
+    assert flag['rows_affected'] == 0 and flag['flags']['value']['outlier_count'] == 1

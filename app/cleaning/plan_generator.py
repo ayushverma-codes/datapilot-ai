@@ -1,18 +1,38 @@
+import json
 from uuid import NAMESPACE_URL, uuid5
 from app.models.contracts import Step
 from app.cleaning.transformation_registry import REGISTRY, validate_operation
+
+RISK_LEVELS = ['low', 'medium', 'high']
+ISSUE_CATEGORIES = {
+    'convert_numeric': {'mixed_types', 'invalid_numeric'},
+    'parse_dates': {'invalid_dates', 'ambiguous_dates', 'inconsistent_date_formats'},
+    'category_normalization': {'case_inconsistency', 'category_variants'},
+    'normalize_strings': {'case_inconsistency'},
+}
+
+
+def related_issue_ids(issues, operation, columns):
+    return [issue.id for issue in issues if issue.column in columns and
+            (issue.recommended_action == operation or issue.category in ISSUE_CATEGORIES.get(operation, ()))]
 
 
 def generate_plan(file_id, profile, issues, suggestions, overrides=None):
     steps = []
     overrides = overrides or {}
     available = [c['name'] for c in profile['columns']]
+    step_ids = set()
 
     def add(operation, columns, params, reason, source='CODE', issue_ids=None, ai_risk='medium'):
         validate_operation(operation, columns, params, available)
-        levels = ['low', 'medium', 'high']
-        risk = max([REGISTRY[operation].risk, overrides.get(operation, 'low'), ai_risk if source == 'AI' else 'low'], key=levels.index)
-        step = Step(id=uuid5(NAMESPACE_URL, f'{file_id}:{len(steps)}:{operation}:{columns}').hex,
+        risk = max([REGISTRY[operation].risk, overrides.get(operation, 'low'),
+                    max(ai_risk, 'medium', key=RISK_LEVELS.index) if source == 'AI' else 'low'], key=RISK_LEVELS.index)
+        identity = json.dumps([file_id, source, operation, columns, params, risk], sort_keys=True)
+        step_id = uuid5(NAMESPACE_URL, identity).hex
+        if step_id in step_ids:
+            return
+        step_ids.add(step_id)
+        step = Step(id=step_id,
                     file_id=file_id, issue_ids=issue_ids or [], operation=operation, columns=columns,
                     parameters=params, reason=reason, source=source, risk=risk, approval_required=risk != 'low',
                     expected_impact='Flag for review; no data mutation' if operation == 'flag_outliers' else f'Apply {operation} to selected scope; record changed rows',
@@ -28,9 +48,11 @@ def generate_plan(file_id, profile, issues, suggestions, overrides=None):
     for c in profile['columns']:
         inference = c['inference']
         if inference['physical_type'] == 'numeric' and not inference['potential_identifier']:
-            add('convert_numeric', [c['name']], {}, 'Review numeric interpretation before canonical decimal formatting')
+            add('convert_numeric', [c['name']], {}, 'Review numeric interpretation before canonical decimal formatting',
+                issue_ids=related_issue_ids(issues, 'convert_numeric', [c['name']]))
         if 'date' in c and not c['date']['invalid_count'] and not c['date']['ambiguous_count']:
-            add('parse_dates', [c['name']], {}, 'Review date interpretation before ISO formatting')
+            add('parse_dates', [c['name']], {}, 'Review date interpretation before ISO formatting',
+                issue_ids=related_issue_ids(issues, 'parse_dates', [c['name']]))
     for issue in issues:
         if issue.category == 'potential_outliers':
             add('flag_outliers', [issue.column], {}, 'Statistical outliers may be legitimate; retain values', issue_ids=[issue.id])
@@ -44,7 +66,8 @@ def generate_plan(file_id, profile, issues, suggestions, overrides=None):
             c['name'] == suggestion.column and c['inference']['potential_identifier'] for c in profile['columns']
         ):
             continue
-        add(suggestion.operation, [suggestion.column], suggestion.parameters, suggestion.reason, 'AI', ai_risk=suggestion.risk)
+        add(suggestion.operation, [suggestion.column], suggestion.parameters, suggestion.reason, 'AI',
+            issue_ids=related_issue_ids(issues, suggestion.operation, [suggestion.column]), ai_risk=suggestion.risk)
     # Run row removal last so approved formatting/mappings cannot create duplicates
     # that would only disappear on a second pass.
     tail = {'remove_empty_rows': 1, 'remove_exact_duplicates': 2}

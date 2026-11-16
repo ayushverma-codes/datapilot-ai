@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from datetime import datetime
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
 from typing import Literal
 import pandas as pd
 from pydantic import BaseModel, ConfigDict, Field
@@ -80,7 +80,14 @@ def convert_numeric(frame, columns, params):
             raise ValueError('Column contains invalid or non-finite numerical values')
         number = Decimal(str(value).strip())
         # CSV stores textual values; decimal avoids float rounding or scientific notation loss.
-        return format(number, 'f').rstrip('0').rstrip('.') if '.' in format(number, 'f') else format(number, 'f')
+        if number.is_zero():
+            return '0'
+        integer_digits = max(1, number.adjusted() + 1)
+        fraction_digits = max(0, -number.as_tuple().exponent)
+        if integer_digits + fraction_digits + 2 > 4096:
+            raise ValueError('Canonical numeric value would exceed the cleaning limit')
+        canonical = format(number, 'f')
+        return canonical.rstrip('0').rstrip('.') if '.' in canonical else canonical
     for c in columns:
         frame[c] = frame[c].map(convert).astype('string')
     return frame

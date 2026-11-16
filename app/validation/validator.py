@@ -28,5 +28,7 @@ def validate(before, after, original, cleaned, steps, logs, remaining):
             'inferred_types_before': {c['name']: c['inference']['physical_type'] for c in before['columns']},
             'inferred_types_after': {c['name']: c['inference']['physical_type'] for c in after['columns']},
             'missing_cells_before': before['missing_cells'], 'missing_cells_after': after['missing_cells'],
+            'null_counts_before': {c['name']: c['null_count'] for c in before['columns']},
+            'null_counts_after': {c['name']: c['null_count'] for c in after['columns']},
             'duplicates_before': before['duplicate_rows'], 'duplicates_after': after['duplicate_rows'],
             'failed_steps': failures, 'unresolved_issues': [i.model_dump() for i in remaining]}

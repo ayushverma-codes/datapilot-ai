@@ -1,4 +1,3 @@
-import hashlib
 import pandas as pd
 from app.cleaning.transformation_registry import validate_operation
 
@@ -21,9 +20,9 @@ def execute_step(frame, step):
     outside = [c for c in frame.columns if c not in scope]
     if outside and not candidate[outside].equals(frame.loc[candidate.index, outside]):
         raise ValueError('Transformation modified columns outside approved scope')
-    before = frame.loc[candidate.index].fillna('\x00')
-    after = candidate.fillna('\x00')
-    changed = (before != after).any(axis=1)
+    before = frame.loc[candidate.index]
+    equal = before.eq(candidate).fillna(False) | (before.isna() & candidate.isna())
+    changed = (~equal).any(axis=1)
     affected = list(removed) + list(changed[changed].index)
     audit = {"step_id": step.id, "operation": step.operation, "status": 'COMPLETED',
              "input_rows": len(frame), "output_rows": len(candidate), "rows_affected": len(affected),

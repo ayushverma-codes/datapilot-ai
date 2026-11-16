@@ -184,6 +184,9 @@ class IngestionService:
         description = (file.metadata_json or {}).get('description')
         if description:
             result['description'] = description
+        ai = (file.metadata_json or {}).get('ai')
+        if ai:
+            result['ai'] = ai
         return result
 
     def get_run(self, user, run_id):
@@ -303,7 +306,8 @@ class IngestionService:
                 raise PipelineError('NOT_READY', 'File cannot accept a new proposal', 409)
             spec, _ = validate_operation(operation, columns, parameters, file.metadata_json['columns'])
             step = Step(id=uid(), file_id=file_id, operation=operation, columns=columns, parameters=parameters,
-                        reason=reason, risk='high' if spec.risk == 'high' else 'medium', approval_required=True,
+                        reason=reason, risk='high' if 'high' in (spec.risk, self.settings.risk_overrides.get(operation)) else 'medium',
+                        approval_required=True,
                         expected_impact='Explicit user-proposed operation; review parameters before approval', status='AWAITING_APPROVAL')
             position = next((s.position for s in file.plan.steps if s.payload['operation'] in ('remove_empty_rows', 'remove_exact_duplicates')), len(file.plan.steps))
             for existing in file.plan.steps:
@@ -347,7 +351,9 @@ class IngestionService:
                 for record in file.plan.steps:
                     step = Step.model_validate(self.step_dict(record))
                     # Rebuild from immutable raw on every revision, never apply a destructive step twice to cleaned output.
-                    if step.status not in ('AUTO_APPROVED', 'APPROVED', 'COMPLETED'):
+                    # A failed step was already authorized. Replay it on a new revision
+                    # so a later approval cannot silently drop the failed operation.
+                    if step.status not in ('AUTO_APPROVED', 'APPROVED', 'COMPLETED', 'FAILED'):
                         continue
                     try:
                         candidate, log = execute_step(working, step)
@@ -357,7 +363,7 @@ class IngestionService:
                         step.status = record.status = 'FAILED'
                         log = {'step_id': step.id, 'operation': step.operation, 'status': 'FAILED', 'input_rows': len(working),
                                'output_rows': len(working), 'rows_affected': 0, 'error': 'TRANSFORMATION_FAILED', 'error_type': type(exc).__name__}
-                    logs.append(log)
+                    logs.append({**log, 'approval_status': 'APPROVED' if step.approval_required else 'AUTO_APPROVED'})
                     executed.append(step)
                 content = working.to_csv(index=False, lineterminator='\n').encode('utf-8')
                 # The output is a new CSV artifact with its own delimiter, encoding and headers.
