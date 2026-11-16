@@ -5,6 +5,7 @@ import logging
 import re
 from collections import defaultdict
 from decimal import Decimal, InvalidOperation
+from urllib.parse import urlsplit
 
 import httpx
 
@@ -86,31 +87,81 @@ def deterministic_plan(question, columns):
     return QueryPlan(operation=operation, column=column, group_by=group_column)
 
 
-def ai_plan(question, profile, settings, transport=None):
+def request_plan(system, payload, settings, transport=None):
     if not settings.ai_enabled or settings.ai_provider != 'openai-compatible' or not settings.ai_key or not settings.ai_model:
-        return None
-    schema = [{'name': column['name'], 'semantic_type': column['inference']['semantic_type'],
-               'potential_numeric': column['inference']['potential_numeric']}
-              for column in profile['columns'][:500]]
-    payload = json.dumps({'question': question, 'schema': schema}, ensure_ascii=False)[:30000]
+        return None, {'status': 'DISABLED' if not settings.ai_enabled else 'AI_CONFIGURATION', 'attempts': []}
+    message = json.dumps(payload, ensure_ascii=False, separators=(',', ':'))
+    if len(message.encode()) > 4800:
+        return None, {'status': 'AI_PROMPT_LIMIT', 'attempts': []}
+    request = {'model': settings.ai_model, 'temperature': 0, 'response_format': {'type': 'json_object'},
+               'messages': [{'role': 'system', 'content': system}, {'role': 'user', 'content': message}]}
+    try:
+        host = urlsplit(settings.ai_url).hostname
+    except ValueError:
+        return None, {'status': 'AI_CONFIGURATION', 'attempts': []}
+    request['max_completion_tokens' if host == 'api.groq.com' else 'max_tokens'] = 1400
+    if host == 'api.groq.com':
+        if settings.ai_model.startswith('openai/gpt-oss-'):
+            request['reasoning_effort'] = 'low'
+        elif settings.ai_model == 'qwen/qwen3.8-27b':
+            request['reasoning_effort'] = 'none'
+    attempts = []
+    generated = None
     for attempt in range(min(settings.ai_attempts, 3)):
+        retry = True
         try:
             with httpx.Client(timeout=settings.ai_timeout, transport=transport) as client:
                 response = client.post(settings.ai_url.rstrip('/') + '/chat/completions',
-                                       headers={'Authorization': 'Bearer ' + settings.ai_key},
-                                       json={'model': settings.ai_model, 'temperature': 0, 'max_tokens': 1000,
-                                             'response_format': {'type': 'json_object'},
-                                             'messages': [{'role': 'system', 'content': PLANNER_SYSTEM},
-                                                          {'role': 'user', 'content': payload}]})
+                                       headers={'Authorization': 'Bearer ' + settings.ai_key}, json=request)
                 response.raise_for_status()
                 if len(response.content) > 50000:
                     raise ValueError('Planner response exceeds limit')
-                content = response.json()['choices'][0]['message']['content']
-                return QueryPlan.model_validate_json(content)
-        except Exception as exc:
-            # Never log the question, dataset schema, provider response or credential.
-            logger.warning('assistant_planning_failed attempt=%s error_type=%s', attempt + 1, type(exc).__name__)
-    return None
+                choice = response.json()['choices'][0]
+                content = choice['message']['content']
+                if isinstance(content, str):
+                    generated = content[:12000]
+                if choice.get('finish_reason', 'stop') != 'stop' or len(content) > 12000:
+                    raise ValueError('Incomplete planner response')
+                parsed = json.loads(content, parse_constant=_invalid_constant, parse_float=_invalid_constant)
+                return parsed, {'status': 'COMPLETED', 'attempts': [*attempts, 'COMPLETED'],
+                                'generated': parsed}
+        except httpx.HTTPStatusError as exc:
+            code = 'AI_RATE_LIMITED' if exc.response.status_code == 429 else 'AI_PROVIDER_ERROR'
+            retry = exc.response.status_code >= 500 or exc.response.status_code == 408
+        except httpx.TimeoutException:
+            code = 'AI_TIMEOUT'
+        except (httpx.RequestError, httpx.InvalidURL):
+            code = 'AI_PROVIDER_ERROR'
+        except (ValueError, IndexError, KeyError, TypeError, RecursionError):
+            code = 'AI_INVALID_JSON'
+        attempts.append(code)
+        logger.warning('assistant_planning_failed attempt=%s code=%s', attempt + 1, code)
+        if not retry:
+            break
+    return None, {'status': attempts[-1] if attempts else 'AI_CONFIGURATION',
+                  'attempts': attempts, 'generated': generated}
+
+
+def _invalid_constant(value):
+    raise ValueError('Nonfinite JSON constant')
+
+
+def ai_plan(question, profile, settings, transport=None, audit=None):
+    payload = {'question': question, 'schema': []}
+    for column in profile['columns']:
+        item = {'name': column['name'], 'semantic_type': column['inference']['semantic_type'],
+                'potential_numeric': column['inference']['potential_numeric']}
+        payload['schema'].append(item)
+        if len(json.dumps(payload, ensure_ascii=False).encode()) > 4600:
+            payload['schema'].pop()
+    parsed, provider = request_plan(PLANNER_SYSTEM, payload, settings, transport)
+    if audit is not None:
+        audit['generated_plan'] = provider.pop('generated', None)
+        audit['planner'] = provider
+    try:
+        return QueryPlan.model_validate(parsed) if parsed is not None else None
+    except ValueError:
+        return None
 
 
 def _decimal(value, column):
@@ -124,27 +175,25 @@ def _decimal(value, column):
 
 
 def _matches(row, filters):
-    for condition in filters:
-        raw = row.get(condition.column, '')
-        is_null = raw is None or raw.strip() == ''
-        if condition.operator == 'is_null':
-            passed = is_null
-        elif condition.operator == 'is_not_null':
-            passed = not is_null
-        elif condition.operator == 'eq':
-            passed = raw == condition.value
-        elif condition.operator == 'ne':
-            passed = raw != condition.value
-        elif condition.operator == 'contains':
-            passed = condition.value.casefold() in raw.casefold()
-        elif is_null:
-            passed = False
-        else:
-            left, right = _decimal(raw, condition.column), _decimal(condition.value, condition.column)
-            passed = {'gt': left > right, 'gte': left >= right, 'lt': left < right, 'lte': left <= right}[condition.operator]
-        if not passed:
-            return False
-    return True
+    return all(matches_value(row.get(condition.column, ''), condition) for condition in filters)
+
+
+def matches_value(raw, condition, parse=_decimal):
+    is_null = raw is None or raw.strip() == ''
+    if condition.operator == 'is_null':
+        return is_null
+    if condition.operator == 'is_not_null':
+        return not is_null
+    if condition.operator == 'eq':
+        return raw == condition.value
+    if condition.operator == 'ne':
+        return raw != condition.value
+    if condition.operator == 'contains':
+        return not is_null and condition.value.casefold() in raw.casefold()
+    if is_null:
+        return False
+    left, right = parse(raw, condition.column), parse(condition.value, condition.column)
+    return {'gt': left > right, 'gte': left >= right, 'lt': left < right, 'lte': left <= right}[condition.operator]
 
 
 def _state():
@@ -152,17 +201,20 @@ def _state():
 
 
 def _aggregate(state, row, plan):
+    accumulate(state, row.get(plan.column, ''), plan.operation, plan.column)
+
+
+def accumulate(state, raw, operation, column, parse=_decimal):
     state['rows'] += 1
-    if plan.operation == 'row_count':
+    if operation == 'row_count':
         return
-    raw = row.get(plan.column, '')
-    if plan.operation == 'count_distinct':
+    if operation == 'count_distinct':
         if raw is not None and raw.strip() != '':
             state['values'].add(raw)
         return
     if raw is None or raw.strip() == '':
         return
-    number = _decimal(raw, plan.column)
+    number = parse(raw, column)
     state['numeric_count'] += 1
     state['total'] += number
     if state['numeric_count'] == 1:
@@ -258,16 +310,56 @@ def _answer(plan, result):
     return f"The {_definition(plan)} is {result['value']} across {result['rows_matched']} matching rows."
 
 
-def answer_question(service, user, file_id, question, settings, transport=None):
-    profile = service.get_profile(user, file_id, 'cleaned')
-    path = service.download(user, file_id)
+def answer_question(service, user, file_id, question, settings, transport=None, trace=None):
+    with service.lock:
+        profile = service.get_profile(user, file_id, 'cleaned')
+        path = service.download(user, file_id)
     columns = {column['name'] for column in profile['columns']}
-    plan = ai_plan(question, profile, settings, transport)
+    if trace is not None:
+        trace['selected_sources'] = {'left': {'file_id': file_id, 'run_id': profile['run_id'],
+                                        'revision': profile['revision'], 'artifact_id': path.stem,
+                                        'profile_id': profile['profile_id']}}
+    plan = ai_plan(question, profile, settings, transport, trace)
     source = 'AI'
     if plan is None:
-        plan = deterministic_plan(question, columns)
+        if trace is not None and trace['planner']['status'] == 'COMPLETED':
+            raise PipelineError('INVALID_QUERY_PLAN', 'The generated plan did not match the analytical contract')
+        if trace is None:
+            plan = deterministic_plan(question, columns)
+        else:
+            from app.conversation.analysis_planner import fallback
+            scope = {'evidence': trace['selected_sources']['left'],
+                     'schema': {c['name']: c['inference']['physical_type'] for c in profile['columns']}}
+            simple = fallback(question, 'd1', scope, None)
+            if simple.intent != 'aggregate':
+                raise PipelineError('UNSUPPORTED_QUESTION', 'Specify an exact aggregate or use the datasets request format')
+            plan = QueryPlan(operation=simple.operation, column=simple.column.column if simple.column else None,
+                             group_by=simple.group_by.column if simple.group_by else None,
+                             filters=[item.model_dump(exclude={'side'}) for item in simple.filters])
         source = 'RULES'
+    if trace is not None:
+        trace['intent'] = 'aggregate'
+        trace['plan_source'] = source
+        trace['proposed_plan'] = plan.model_dump()
     validate_plan(plan, columns)
+    if trace is not None:
+        trace['validated_plan'] = plan.model_dump()
+        trace['operations'] = [plan.operation]
+        trace['evidence'] = {'source_datasets': trace['selected_sources'], 'join': None,
+                             'columns_used': {'left': sorted({c for c in (plan.column, plan.group_by,
+                                               *(condition.column for condition in plan.filters)) if c})},
+                             'filters': trace['validated_plan']['filters'],
+                             'records_scanned': profile['row_count'], 'records_considered': None}
+        trace['execution'] = 'STARTED'
     result = execute_plan(path, plan, profile, settings, file_id)
     result['plan_source'] = source
+    if trace is not None:
+        trace['evidence']['records_considered'] = result['rows_matched']
+        preview = dict(result)
+        if 'groups' in preview:
+            preview['groups'] = [{**item, 'value': item['value'][:200] if item['value'] else None}
+                                 for item in preview['groups']]
+        trace.update(status='ANSWERED' if result['value'] is not None else 'UNSUPPORTED',
+                     result_preview=preview, answer=result['answer'], execution='VERIFIED')
+        result['trace_id'] = trace['trace_id']
     return result

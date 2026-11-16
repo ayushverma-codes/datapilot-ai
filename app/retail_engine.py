@@ -188,10 +188,14 @@ def number(value, integer=False):
     return result
 
 
-def compute_metrics(frames, sources, request, join_config=None, joined=None):
+def require_base_grain(joined):
     if joined and (joined.stats['left_fanout_rows'] or joined.stats['output_rows'] != joined.stats['left_rows']):
         raise PipelineError('UNSAFE_METRIC_JOIN', 'Metrics require a join that preserves every base row exactly once',
                             details=joined.stats)
+
+
+def compute_metrics(frames, sources, request, join_config=None, joined=None):
+    require_base_grain(joined)
     filters = [(rule.side, rule.column, set(rule.values)) for rule in request.filters]
     for side, col, _ in filters:
         if side not in frames:

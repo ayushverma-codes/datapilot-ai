@@ -114,6 +114,12 @@ class RetailRelationship(Record, Base):
     payload: Mapped[dict] = mapped_column(JSON)
 
 
+class AssistantTrace(Record, Base):
+    __tablename__ = "assistant_traces"
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
+    payload: Mapped[dict] = mapped_column(JSON)
+
+
 class Conversation(Record, Base):
     __tablename__ = "conversations"
     __table_args__ = (Index("ix_conversations_user_updated", "user_id", "updated_at"),)

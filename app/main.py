@@ -11,7 +11,7 @@ from starlette.concurrency import run_in_threadpool
 from starlette.exceptions import HTTPException
 from app.config import Settings
 from app.models.contracts import BatchDecision, Contract, Decision, PipelineError
-from app.conversation.assistant import answer_question
+from app.conversation.analysis_contracts import AnalyticalQuestion
 from app.conversation.contracts import AssistantQuestion
 from app.conversation.memory import ConversationService
 from app.conversation.memory_contracts import ConversationCreate, ConversationMessageRequest, ConversationUpdate
@@ -20,6 +20,7 @@ from app.retail_bi import answer_retail_question, catalog as retail_metric_catal
 from app.retail_contracts import DatasetPair, MetricsRequest, NormalizationRequest, RelationshipRequest
 from app.services.ingestion_service import IngestionService, UploadInput
 from app.services.retail_service import RetailService
+from app.services.assistant_service import AssistantService
 
 
 class Proposal(Contract):
@@ -81,6 +82,7 @@ def create_app(settings=None):
     service = IngestionService(settings)
     conversations = ConversationService(service, settings)
     retail = RetailService(service)
+    assistant = AssistantService(service, retail, conversations)
 
     @asynccontextmanager
     async def lifespan(app):
@@ -200,8 +202,14 @@ def create_app(settings=None):
         return FileResponse(service.download(user, file_id), media_type='text/csv', filename=f'{file_id}-cleaned.csv')
 
     @api.post('/api/v1/assistant/query')
-    def assistant_query(body: AssistantQuestion, user=Depends(identity)):
-        return answer_question(service, user, body.file_id, body.question, settings)
+    def assistant_query(body: AnalyticalQuestion | AssistantQuestion, user=Depends(identity)):
+        if isinstance(body, AnalyticalQuestion):
+            return assistant.analyze(user, body)
+        return assistant.legacy(user, body)
+
+    @api.get('/api/v1/assistant/traces/{trace_id}')
+    def assistant_trace(trace_id: str, user=Depends(identity)):
+        return assistant.trace(user, trace_id)
 
     @api.post('/api/v1/conversations', status_code=201)
     def create_conversation(body: ConversationCreate, user=Depends(identity)):
