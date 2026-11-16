@@ -1,0 +1,147 @@
+# DataPilot AI
+
+## From raw data to intelligent conversations.
+
+Businesses often work with disconnected, inconsistent datasets. DataPilot AI turns uploaded CSV files into profiled, quality-checked and reviewably cleaned data, then supports evidence-backed analytics through constrained APIs and persistent conversations.
+
+This repository is a backend assessment project. It is a modular monolith built with FastAPI, pandas, SQLAlchemy and SQLite by default. It is not a hosted service and makes no production-readiness claim.
+
+## What it does
+
+- **CSV ingestion and cleaning** uploads one or more unrelated CSV files in one run, profiles each file independently, detects quality issues, proposes an allow-listed cleaning plan, records approvals, executes selected transformations, and serves the validated artifact.
+- **Olist analytics** calculates the accepted Olist retail report from cleaned orders, items, payments, products and category mapping inputs. Financial measures are independently aggregated and reported separately.
+- **Conversational analytics** supports queries over an owned, cleaned CSV, fixed-catalog Olist retail questions, and persistent, user-owned conversations with context-aware follow-ups and clarification.
+
+There is no frontend in this release. Use the API and its OpenAPI page at `/docs`.
+
+## Reports
+
+- [Module 1 — Data ingestion and preprocessing](Reports/MODULE_1_COMPLETION_REPORT.md)
+
+## Architecture
+
+FastAPI routes in `app/main.py` hand uploads to the ingestion service, which coordinates parsing, profiling, quality checks, planning and validation. SQLAlchemy stores registry and conversation records. The filesystem stores original CSVs, cleaned outputs and JSON artifacts. Conversation services use the same validated artifacts and the accepted retail aggregates.
+
+Core rule: **AI may interpret a request and propose a structured plan; application code validates and performs the operation.** The model does not independently calculate or verify numerical results.
+
+## AI and deterministic execution
+
+| Operation | Responsibility |
+|---|---|
+| Natural-language interpretation and optional plan proposal | Optional AI planner; deterministic rules are used when AI is disabled or unavailable |
+| Schema and request validation | Application contracts and current file profile |
+| Allowed-operation validation | Application allow-list and strict Pydantic models |
+| Filtering, grouping and aggregation | Deterministic Python code over validated CSV or accepted retail aggregates |
+| Cleaning transformations | Deterministic registered transformations |
+| Numerical checks and evidence | Application code |
+| Final answer assembly | Application code; response includes result, definition and evidence |
+
+No arbitrary model-generated Python or SQL is executed. Generic CSV analytics are performed with `Decimal` numeric parsing and reject invalid numeric inputs. Retail questions resolve only to the fixed Module 2 metric catalog.
+
+## Conversational workflow
+
+`Question → context resolution → optional planner → structured plan → schema/allow-list validation → deterministic execution → result verification → answer and evidence`
+
+Conversation context and messages are persisted in the SQLAlchemy database. Follow-ups use stored structured context and a bounded recent-message window; clarification or failed queries do not replace the last successful analytical context. The deterministic follow-up resolver does not send stored conversation history to an AI provider.
+
+## API overview
+
+Protected endpoints require a configured bearer token. The principal is derived from server-side token configuration.
+
+- `POST /api/v1/ingestion/upload` — accept repeated multipart `files` parts. Optional `descriptions` parts follow file order. Use an empty description for a file that needs none.
+- `GET /api/v1/ingestion/{run_id}` — inspect parent and per-file statuses.
+- `GET /api/v1/files/{file_id}/profile` — inspect the original or cleaned profile.
+- `GET /api/v1/files/{file_id}/issues` and `/cleaning-plan` — inspect findings and proposed operations.
+- `POST /api/v1/cleaning-steps/{step_id}/approve` or `/reject` — make a recorded decision.
+- `POST /api/v1/files/{file_id}/clean` — run approved operations and validate.
+- `GET /api/v1/files/{file_id}/validation` and `/download` — inspect and retrieve the validated result.
+- `POST /api/v1/assistant/query` — query one owned validated CSV.
+- `POST /api/v1/conversations` and `/api/v1/conversations/{id}/messages` — create a conversation and send a message.
+- `GET /api/v1/assistant/retail/metrics` and `POST /api/v1/assistant/retail/query` — read the retail catalog and ask Olist questions.
+
+Full request schemas are exposed by `/openapi.json` and `/docs`.
+
+## Security and privacy
+
+- Bearer tokens map to stable internal users on the server; file, run and conversation access is owner-scoped.
+- Uploaded artifact paths are generated by the application and checked to remain under configured storage.
+- Default limits are 20 MiB per file, 100 MiB per request, 200,000 rows, 500 columns and 5,000,000 cells. These limits are configurable.
+- Structured plans are validated before execution; invalid columns and operations are rejected.
+- AI is disabled by default. When enabled, quality analysis sends bounded column metadata and issue summaries, not raw row values by default. Generic query planning sends the question and bounded schema metadata; retail planning sends the question and metric catalog rather than report values.
+- `AI_INCLUDE_SAMPLES=true` can send a small number of heuristically redacted samples for eligible non-identifier columns. The redaction is not guaranteed anonymization. Do not enable it for sensitive data without reviewing the data-sharing implications.
+- Provider timeouts are bounded and deterministic fallback is available where supported. Public application errors use structured responses.
+- CSV fields are untrusted input. Formula-like values beginning with `=`, `+`, `-` or `@` are preserved; the application does not neutralize spreadsheet formulas. Treat downloaded CSVs as untrusted when opening them in spreadsheet software.
+- Stage 4 observed that internal logs for a forced storage failure may include a traceback and local source path. This information was not exposed in the tested public response.
+
+These are application checks, not a formal penetration test or security certification.
+
+## Installation and reproducibility
+
+The earlier project documentation specifies Python 3.11 or newer. The final clean-clone release validation used Python 3.14.7 because Python 3.11 was unavailable on the validation machine. Python 3.11 compatibility was not independently tested. Dependency ranges are in `requirements.txt`.
+
+From the extracted release root, in PowerShell:
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+$env:STORAGE_DIR = '.\data'
+$env:DEV_MODE = 'false'
+$env:AI_ENABLED = 'false'
+$env:AI_INCLUDE_SAMPLES = 'false'
+$env:API_TOKENS = '{"replace-with-a-long-random-token":"assessment-user"}'
+.\.venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --workers 1
+```
+
+The API creates SQLite tables and the additive conversation migration at startup. With default settings the SQLite metadata database is `data/metadata.db`; uploaded files are stored under `STORAGE_DIR`. The process reads environment variables directly. Copying `.env.example` alone does not load it. `DEV_MODE=true` permits a fixed local development principal when no authorization header is sent; do not expose that mode.
+
+Check `http://127.0.0.1:8000/health` and open `http://127.0.0.1:8000/docs`.
+
+## Tests and evaluations
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest -q
+.\.venv\Scripts\python.exe -m scripts.evaluate_conversation_memory
+.\.venv\Scripts\python.exe -m app.evaluate --input examples/cases.json --output evaluation_output/phase4-evaluation/results.json --artifacts-dir evaluation_output/phase4-evaluation/artifacts
+```
+
+To regenerate the Olist report from the included cleaned handoff:
+
+```powershell
+.\.venv\Scripts\python.exe -m app.retail --input-dir evaluation_output/olist/handoff/cleaned --output evaluation_output/module2/olist-summary.json
+```
+
+That command writes an output file; do not run it over the protected accepted summary unless intentionally regenerating and reviewing an artifact. The release includes the accepted report and enrichment with checksums.
+
+## Accepted Olist regression values
+
+The included real-data tests verify the accepted handoff and report values:
+
+| Metric | Accepted value |
+|---|---:|
+| Orders / delivered | 99,441 / 96,478 |
+| Delivered merchandise | 13,221,498.11 |
+| Delivered freight | 2,198,275.64 |
+| Delivered recorded payments | 15,422,461.77 |
+| On-time / measured deliveries | 89,936 / 96,470 |
+| Missing delivery dates | 8 |
+| On-time percentage | 93.23% |
+
+Monthly and category merchandise each reconcile to 13,221,498.11. Payment totals remain a separate measure from merchandise plus freight.
+
+The historical evidence label `MODULE2_PAYMENT_RECONCILIATION.md` refers to the independent reconciliation summarized here. Across 570 delivered orders with discrepancies, recorded payments exceeded merchandise plus freight by a net 2,688.02. The source data establishes the difference and leaves its business cause unresolved.
+
+### Olist data attribution
+
+The bundled retail fixtures come from the [Brazilian E-Commerce Public Dataset by Olist](https://www.kaggle.com/olistbr/brazilian-ecommerce), published by Olist and its dataset collaborators. The five bundled CSVs are a subset of the source tables. Preprocessing standardized selected timestamp and monetary formats while preserving their underlying values. The two JSON summaries contain aggregates and category and timestamp metadata derived from the cleaned tables.
+
+The bundled Olist data and its adaptations are shared under [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/). These terms cover the Olist data and adaptations in this repository.
+
+## Stage 4 performance and validation
+
+The accepted Stage 4 suite passed 125 tests; the API matrix passed 134/134; security and recovery passed 18/18; conversation evaluation passed 13/13; and the batch evaluator passed 2/2 cases. The local performance harness ran five repetitions at each of 1,000, 10,000 and 50,000 synthetic rows. Median complete workflows were 0.453 s, 1.662 s and 7.542 s, respectively. The benchmark used an in-process FastAPI TestClient, not Uvicorn or a deployed service. It reports median and maximum, not p95. There is no documented production SLA.
+
+The Stage 5 submission bundle includes the clean-clone release report and exact command results alongside the application archive.
+
+## Known limitations
+
+Python 3.11, PostgreSQL integration, real external LLM behavior, production capacity, broad concurrency performance, formal security testing and the optional 200k-row workload are unverified. The service is a synchronous, single-worker modular monolith with local filesystem storage and a SQLite default.

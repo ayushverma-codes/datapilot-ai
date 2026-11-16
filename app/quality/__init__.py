@@ -1,0 +1,1 @@
+"""Extensible independent quality rules."""

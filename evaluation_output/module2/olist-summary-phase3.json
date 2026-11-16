@@ -1,0 +1,673 @@
+{
+  "order_count_by_status": {
+    "approved": 2,
+    "canceled": 625,
+    "created": 5,
+    "delivered": 96478,
+    "invoiced": 314,
+    "processing": 301,
+    "shipped": 1107,
+    "unavailable": 609
+  },
+  "delivered_merchandise_value": "13221498.11",
+  "delivered_freight_value": "2198275.64",
+  "delivered_payment_value": "15422461.77",
+  "delivery": {
+    "on_time": 89936,
+    "measured": 96470,
+    "missing_dates": 8
+  },
+  "monthly": [
+    {
+      "purchase_month": "2016-09",
+      "delivered_orders": 1,
+      "merchandise_value": "134.97"
+    },
+    {
+      "purchase_month": "2016-10",
+      "delivered_orders": 265,
+      "merchandise_value": "40325.11"
+    },
+    {
+      "purchase_month": "2016-12",
+      "delivered_orders": 1,
+      "merchandise_value": "10.9"
+    },
+    {
+      "purchase_month": "2017-01",
+      "delivered_orders": 750,
+      "merchandise_value": "111798.36"
+    },
+    {
+      "purchase_month": "2017-02",
+      "delivered_orders": 1653,
+      "merchandise_value": "234223.40"
+    },
+    {
+      "purchase_month": "2017-03",
+      "delivered_orders": 2546,
+      "merchandise_value": "359198.85"
+    },
+    {
+      "purchase_month": "2017-04",
+      "delivered_orders": 2303,
+      "merchandise_value": "340669.68"
+    },
+    {
+      "purchase_month": "2017-05",
+      "delivered_orders": 3546,
+      "merchandise_value": "489338.25"
+    },
+    {
+      "purchase_month": "2017-06",
+      "delivered_orders": 3135,
+      "merchandise_value": "421923.37"
+    },
+    {
+      "purchase_month": "2017-07",
+      "delivered_orders": 3872,
+      "merchandise_value": "481604.52"
+    },
+    {
+      "purchase_month": "2017-08",
+      "delivered_orders": 4193,
+      "merchandise_value": "554699.70"
+    },
+    {
+      "purchase_month": "2017-09",
+      "delivered_orders": 4150,
+      "merchandise_value": "607399.67"
+    },
+    {
+      "purchase_month": "2017-10",
+      "delivered_orders": 4478,
+      "merchandise_value": "648247.65"
+    },
+    {
+      "purchase_month": "2017-11",
+      "delivered_orders": 7289,
+      "merchandise_value": "987765.37"
+    },
+    {
+      "purchase_month": "2017-12",
+      "delivered_orders": 5513,
+      "merchandise_value": "726033.19"
+    },
+    {
+      "purchase_month": "2018-01",
+      "delivered_orders": 7069,
+      "merchandise_value": "924645.00"
+    },
+    {
+      "purchase_month": "2018-02",
+      "delivered_orders": 6555,
+      "merchandise_value": "826437.13"
+    },
+    {
+      "purchase_month": "2018-03",
+      "delivered_orders": 7003,
+      "merchandise_value": "953356.25"
+    },
+    {
+      "purchase_month": "2018-04",
+      "delivered_orders": 6798,
+      "merchandise_value": "973534.09"
+    },
+    {
+      "purchase_month": "2018-05",
+      "delivered_orders": 6749,
+      "merchandise_value": "977544.69"
+    },
+    {
+      "purchase_month": "2018-06",
+      "delivered_orders": 6099,
+      "merchandise_value": "856077.86"
+    },
+    {
+      "purchase_month": "2018-07",
+      "delivered_orders": 6159,
+      "merchandise_value": "867953.46"
+    },
+    {
+      "purchase_month": "2018-08",
+      "delivered_orders": 6351,
+      "merchandise_value": "838576.64"
+    }
+  ],
+  "purchase_timestamp_exceptions": {
+    "missing_delivered_orders": 0,
+    "invalid_delivered_orders": 0
+  },
+  "categories": [
+    {
+      "source_category": "beleza_saude",
+      "category_english": "health_beauty",
+      "merchandise_value": "1233131.72",
+      "mapping_status": "TRANSLATED",
+      "item_count": 9465
+    },
+    {
+      "source_category": "relogios_presentes",
+      "category_english": "watches_gifts",
+      "merchandise_value": "1166176.98",
+      "mapping_status": "TRANSLATED",
+      "item_count": 5859
+    },
+    {
+      "source_category": "cama_mesa_banho",
+      "category_english": "bed_bath_table",
+      "merchandise_value": "1023434.76",
+      "mapping_status": "TRANSLATED",
+      "item_count": 10953
+    },
+    {
+      "source_category": "esporte_lazer",
+      "category_english": "sports_leisure",
+      "merchandise_value": "954852.55",
+      "mapping_status": "TRANSLATED",
+      "item_count": 8431
+    },
+    {
+      "source_category": "informatica_acessorios",
+      "category_english": "computers_accessories",
+      "merchandise_value": "888724.61",
+      "mapping_status": "TRANSLATED",
+      "item_count": 7644
+    },
+    {
+      "source_category": "moveis_decoracao",
+      "category_english": "furniture_decor",
+      "merchandise_value": "711927.69",
+      "mapping_status": "TRANSLATED",
+      "item_count": 8160
+    },
+    {
+      "source_category": "utilidades_domesticas",
+      "category_english": "housewares",
+      "merchandise_value": "615628.69",
+      "mapping_status": "TRANSLATED",
+      "item_count": 6795
+    },
+    {
+      "source_category": "cool_stuff",
+      "category_english": "cool_stuff",
+      "merchandise_value": "610204.10",
+      "mapping_status": "TRANSLATED",
+      "item_count": 3718
+    },
+    {
+      "source_category": "automotivo",
+      "category_english": "auto",
+      "merchandise_value": "578966.65",
+      "mapping_status": "TRANSLATED",
+      "item_count": 4140
+    },
+    {
+      "source_category": "brinquedos",
+      "category_english": "toys",
+      "merchandise_value": "471286.48",
+      "mapping_status": "TRANSLATED",
+      "item_count": 4030
+    },
+    {
+      "source_category": "ferramentas_jardim",
+      "category_english": "garden_tools",
+      "merchandise_value": "470495.28",
+      "mapping_status": "TRANSLATED",
+      "item_count": 4268
+    },
+    {
+      "source_category": "bebes",
+      "category_english": "baby",
+      "merchandise_value": "400421.84",
+      "mapping_status": "TRANSLATED",
+      "item_count": 2982
+    },
+    {
+      "source_category": "perfumaria",
+      "category_english": "perfumery",
+      "merchandise_value": "390144.65",
+      "mapping_status": "TRANSLATED",
+      "item_count": 3340
+    },
+    {
+      "source_category": "telefonia",
+      "category_english": "telephony",
+      "merchandise_value": "309860.23",
+      "mapping_status": "TRANSLATED",
+      "item_count": 4430
+    },
+    {
+      "source_category": "moveis_escritorio",
+      "category_english": "office_furniture",
+      "merchandise_value": "268154.31",
+      "mapping_status": "TRANSLATED",
+      "item_count": 1668
+    },
+    {
+      "source_category": "papelaria",
+      "category_english": "stationery",
+      "merchandise_value": "223788.69",
+      "mapping_status": "TRANSLATED",
+      "item_count": 2466
+    },
+    {
+      "source_category": "pcs",
+      "category_english": "computers",
+      "merchandise_value": "218684.14",
+      "mapping_status": "TRANSLATED",
+      "item_count": 199
+    },
+    {
+      "source_category": "pet_shop",
+      "category_english": "pet_shop",
+      "merchandise_value": "211695.64",
+      "mapping_status": "TRANSLATED",
+      "item_count": 1924
+    },
+    {
+      "source_category": "instrumentos_musicais",
+      "category_english": "musical_instruments",
+      "merchandise_value": "184315.74",
+      "mapping_status": "TRANSLATED",
+      "item_count": 651
+    },
+    {
+      "source_category": "eletroportateis",
+      "category_english": "small_appliances",
+      "merchandise_value": "182754.12",
+      "mapping_status": "TRANSLATED",
+      "item_count": 658
+    },
+    {
+      "source_category": null,
+      "category_english": null,
+      "merchandise_value": "170726.63",
+      "mapping_status": "MISSING_SOURCE_CATEGORY",
+      "item_count": 1537
+    },
+    {
+      "source_category": "eletronicos",
+      "category_english": "electronics",
+      "merchandise_value": "155043.93",
+      "mapping_status": "TRANSLATED",
+      "item_count": 2729
+    },
+    {
+      "source_category": "fashion_bolsas_e_acessorios",
+      "category_english": "fashion_bags_accessories",
+      "merchandise_value": "149329.39",
+      "mapping_status": "TRANSLATED",
+      "item_count": 1985
+    },
+    {
+      "source_category": "consoles_games",
+      "category_english": "consoles_games",
+      "merchandise_value": "148003.37",
+      "mapping_status": "TRANSLATED",
+      "item_count": 1089
+    },
+    {
+      "source_category": "construcao_ferramentas_construcao",
+      "category_english": "construction_tools_construction",
+      "merchandise_value": "142108.49",
+      "mapping_status": "TRANSLATED",
+      "item_count": 916
+    },
+    {
+      "source_category": "malas_acessorios",
+      "category_english": "luggage_accessories",
+      "merchandise_value": "138701.63",
+      "mapping_status": "TRANSLATED",
+      "item_count": 1077
+    },
+    {
+      "source_category": "eletrodomesticos_2",
+      "category_english": "home_appliances_2",
+      "merchandise_value": "107953.95",
+      "mapping_status": "TRANSLATED",
+      "item_count": 231
+    },
+    {
+      "source_category": "casa_construcao",
+      "category_english": "home_construction",
+      "merchandise_value": "81407.57",
+      "mapping_status": "TRANSLATED",
+      "item_count": 596
+    },
+    {
+      "source_category": "eletrodomesticos",
+      "category_english": "home_appliances",
+      "merchandise_value": "78832.48",
+      "mapping_status": "TRANSLATED",
+      "item_count": 754
+    },
+    {
+      "source_category": "agro_industria_e_comercio",
+      "category_english": "agro_industry_and_commerce",
+      "merchandise_value": "70566.10",
+      "mapping_status": "TRANSLATED",
+      "item_count": 206
+    },
+    {
+      "source_category": "moveis_sala",
+      "category_english": "furniture_living_room",
+      "merchandise_value": "67350.70",
+      "mapping_status": "TRANSLATED",
+      "item_count": 495
+    },
+    {
+      "source_category": "casa_conforto",
+      "category_english": "home_confort",
+      "merchandise_value": "58008.45",
+      "mapping_status": "TRANSLATED",
+      "item_count": 429
+    },
+    {
+      "source_category": "telefonia_fixa",
+      "category_english": "fixed_telephony",
+      "merchandise_value": "55315.21",
+      "mapping_status": "TRANSLATED",
+      "item_count": 255
+    },
+    {
+      "source_category": "climatizacao",
+      "category_english": "air_conditioning",
+      "merchandise_value": "53323.56",
+      "mapping_status": "TRANSLATED",
+      "item_count": 289
+    },
+    {
+      "source_category": "audio",
+      "category_english": "audio",
+      "merchandise_value": "50570.60",
+      "mapping_status": "TRANSLATED",
+      "item_count": 362
+    },
+    {
+      "source_category": "portateis_casa_forno_e_cafe",
+      "category_english": "small_appliances_home_oven_and_coffee",
+      "merchandise_value": "46589.56",
+      "mapping_status": "TRANSLATED",
+      "item_count": 73
+    },
+    {
+      "source_category": "moveis_cozinha_area_de_servico_jantar_e_jardim",
+      "category_english": "kitchen_dining_laundry_garden_furniture",
+      "merchandise_value": "45531.98",
+      "mapping_status": "TRANSLATED",
+      "item_count": 274
+    },
+    {
+      "source_category": "livros_interesse_geral",
+      "category_english": "books_general_interest",
+      "merchandise_value": "45302.15",
+      "mapping_status": "TRANSLATED",
+      "item_count": 537
+    },
+    {
+      "source_category": "construcao_ferramentas_iluminacao",
+      "category_english": "construction_tools_lights",
+      "merchandise_value": "39957.00",
+      "mapping_status": "TRANSLATED",
+      "item_count": 301
+    },
+    {
+      "source_category": "construcao_ferramentas_seguranca",
+      "category_english": "construction_tools_safety",
+      "merchandise_value": "38773.22",
+      "mapping_status": "TRANSLATED",
+      "item_count": 183
+    },
+    {
+      "source_category": "industria_comercio_e_negocios",
+      "category_english": "industry_commerce_and_business",
+      "merchandise_value": "38498.81",
+      "mapping_status": "TRANSLATED",
+      "item_count": 265
+    },
+    {
+      "source_category": "alimentos",
+      "category_english": "food",
+      "merchandise_value": "28731.15",
+      "mapping_status": "TRANSLATED",
+      "item_count": 499
+    },
+    {
+      "source_category": "market_place",
+      "category_english": "market_place",
+      "merchandise_value": "27795.77",
+      "mapping_status": "TRANSLATED",
+      "item_count": 305
+    },
+    {
+      "source_category": "construcao_ferramentas_jardim",
+      "category_english": "costruction_tools_garden",
+      "merchandise_value": "25096.28",
+      "mapping_status": "TRANSLATED",
+      "item_count": 232
+    },
+    {
+      "source_category": "artes",
+      "category_english": "art",
+      "merchandise_value": "23657.30",
+      "mapping_status": "TRANSLATED",
+      "item_count": 197
+    },
+    {
+      "source_category": "fashion_calcados",
+      "category_english": "fashion_shoes",
+      "merchandise_value": "23001.46",
+      "mapping_status": "TRANSLATED",
+      "item_count": 257
+    },
+    {
+      "source_category": "bebidas",
+      "category_english": "drinks",
+      "merchandise_value": "21529.84",
+      "mapping_status": "TRANSLATED",
+      "item_count": 361
+    },
+    {
+      "source_category": "sinalizacao_e_seguranca",
+      "category_english": "signaling_and_security",
+      "merchandise_value": "21315.05",
+      "mapping_status": "TRANSLATED",
+      "item_count": 197
+    },
+    {
+      "source_category": "moveis_quarto",
+      "category_english": "furniture_bedroom",
+      "merchandise_value": "19051.80",
+      "mapping_status": "TRANSLATED",
+      "item_count": 103
+    },
+    {
+      "source_category": "livros_tecnicos",
+      "category_english": "books_technical",
+      "merchandise_value": "18702.23",
+      "mapping_status": "TRANSLATED",
+      "item_count": 263
+    },
+    {
+      "source_category": "construcao_ferramentas_ferramentas",
+      "category_english": "costruction_tools_tools",
+      "merchandise_value": "15903.95",
+      "mapping_status": "TRANSLATED",
+      "item_count": 103
+    },
+    {
+      "source_category": "alimentos_bebidas",
+      "category_english": "food_drink",
+      "merchandise_value": "14942.88",
+      "mapping_status": "TRANSLATED",
+      "item_count": 269
+    },
+    {
+      "source_category": "fashion_roupa_masculina",
+      "category_english": "fashion_male_clothing",
+      "merchandise_value": "10452.33",
+      "mapping_status": "TRANSLATED",
+      "item_count": 125
+    },
+    {
+      "source_category": "fashion_underwear_e_moda_praia",
+      "category_english": "fashion_underwear_beach",
+      "merchandise_value": "9305.95",
+      "mapping_status": "TRANSLATED",
+      "item_count": 127
+    },
+    {
+      "source_category": "artigos_de_natal",
+      "category_english": "christmas_supplies",
+      "merchandise_value": "8737.84",
+      "mapping_status": "TRANSLATED",
+      "item_count": 150
+    },
+    {
+      "source_category": "tablets_impressao_imagem",
+      "category_english": "tablets_printing_image",
+      "merchandise_value": "7528.41",
+      "mapping_status": "TRANSLATED",
+      "item_count": 83
+    },
+    {
+      "source_category": "cine_foto",
+      "category_english": "cine_photo",
+      "merchandise_value": "6674.47",
+      "mapping_status": "TRANSLATED",
+      "item_count": 70
+    },
+    {
+      "source_category": "musica",
+      "category_english": "music",
+      "merchandise_value": "6034.35",
+      "mapping_status": "TRANSLATED",
+      "item_count": 38
+    },
+    {
+      "source_category": "dvds_blu_ray",
+      "category_english": "dvds_blu_ray",
+      "merchandise_value": "4542.59",
+      "mapping_status": "TRANSLATED",
+      "item_count": 61
+    },
+    {
+      "source_category": "artigos_de_festas",
+      "category_english": "party_supplies",
+      "merchandise_value": "4465.19",
+      "mapping_status": "TRANSLATED",
+      "item_count": 42
+    },
+    {
+      "source_category": "livros_importados",
+      "category_english": "books_imported",
+      "merchandise_value": "4418.86",
+      "mapping_status": "TRANSLATED",
+      "item_count": 57
+    },
+    {
+      "source_category": "moveis_colchao_e_estofado",
+      "category_english": "furniture_mattress_and_upholstery",
+      "merchandise_value": "4323.38",
+      "mapping_status": "TRANSLATED",
+      "item_count": 37
+    },
+    {
+      "source_category": "portateis_cozinha_e_preparadores_de_alimentos",
+      "category_english": null,
+      "merchandise_value": "3933.63",
+      "mapping_status": "UNTRANSLATED",
+      "item_count": 14
+    },
+    {
+      "source_category": "fashion_roupa_feminina",
+      "category_english": "fashio_female_clothing",
+      "merchandise_value": "2634.94",
+      "mapping_status": "TRANSLATED",
+      "item_count": 45
+    },
+    {
+      "source_category": "fashion_esporte",
+      "category_english": "fashion_sport",
+      "merchandise_value": "2094.52",
+      "mapping_status": "TRANSLATED",
+      "item_count": 29
+    },
+    {
+      "source_category": "la_cuisine",
+      "category_english": "la_cuisine",
+      "merchandise_value": "2054.99",
+      "mapping_status": "TRANSLATED",
+      "item_count": 14
+    },
+    {
+      "source_category": "artes_e_artesanato",
+      "category_english": "arts_and_craftmanship",
+      "merchandise_value": "1814.01",
+      "mapping_status": "TRANSLATED",
+      "item_count": 24
+    },
+    {
+      "source_category": "fraldas_higiene",
+      "category_english": "diapers_and_hygiene",
+      "merchandise_value": "1500.79",
+      "mapping_status": "TRANSLATED",
+      "item_count": 37
+    },
+    {
+      "source_category": "pc_gamer",
+      "category_english": null,
+      "merchandise_value": "1306.95",
+      "mapping_status": "UNTRANSLATED",
+      "item_count": 8
+    },
+    {
+      "source_category": "flores",
+      "category_english": "flowers",
+      "merchandise_value": "1110.04",
+      "mapping_status": "TRANSLATED",
+      "item_count": 33
+    },
+    {
+      "source_category": "casa_conforto_2",
+      "category_english": "home_comfort_2",
+      "merchandise_value": "760.27",
+      "mapping_status": "TRANSLATED",
+      "item_count": 30
+    },
+    {
+      "source_category": "cds_dvds_musicais",
+      "category_english": "cds_dvds_musicals",
+      "merchandise_value": "730",
+      "mapping_status": "TRANSLATED",
+      "item_count": 14
+    },
+    {
+      "source_category": "fashion_roupa_infanto_juvenil",
+      "category_english": "fashion_childrens_clothes",
+      "merchandise_value": "519.95",
+      "mapping_status": "TRANSLATED",
+      "item_count": 7
+    },
+    {
+      "source_category": "seguros_e_servicos",
+      "category_english": "security_and_services",
+      "merchandise_value": "283.29",
+      "mapping_status": "TRANSLATED",
+      "item_count": 2
+    }
+  ],
+  "category_mapping_completeness": {
+    "product_count": 32951,
+    "translated_product_count": 32328,
+    "untranslated_product_count": 13,
+    "missing_source_category_product_count": 610,
+    "source_categories": 73
+  },
+  "unmatched_rows": {
+    "item_order": 0,
+    "delivered_item_product": 0,
+    "payment_order": 0
+  }
+}

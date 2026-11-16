@@ -1,0 +1,117 @@
+{
+  "name": "Module 3 Phase 3 deterministic conversation memory",
+  "version": 1,
+  "scenarios": [
+    {
+      "id": "retail_october_to_november",
+      "domain": "olist_retail",
+      "history": [{"message": "What was the merchandise value in October 2017?", "domain": "olist_retail"}],
+      "message": "What about November?",
+      "expect": {"followup": true, "metric_id": "monthly_merchandise_value", "period": "2017-11", "result_path": "result.merchandise_value", "result": "987765.37"},
+      "measures": ["followup_intent", "metric_preservation", "time_period"]
+    },
+    {
+      "id": "compare_both_periods",
+      "domain": "olist_retail",
+      "history": [
+        {"message": "What was the merchandise value in October 2017?", "domain": "olist_retail"},
+        {"message": "What about November?"}
+      ],
+      "message": "Compare both.",
+      "expect": {"followup": true, "metric_id": "monthly_merchandise_value", "period": "2017-11", "result_path": "result.difference_a_minus_b", "result": "339517.72"},
+      "measures": ["followup_intent", "metric_preservation", "time_period"]
+    },
+    {
+      "id": "retail_top_five_to_ten",
+      "domain": "olist_retail",
+      "history": [{"message": "Show the top five categories by merchandise value.", "domain": "olist_retail"}],
+      "message": "Make it top ten.",
+      "expect": {"followup": true, "metric_id": "category_merchandise_value", "ranking_n": 10, "result_length": 10},
+      "measures": ["followup_intent", "metric_preservation", "ranking_modification"]
+    },
+    {
+      "id": "retail_reconciliation_explanation",
+      "domain": "olist_retail",
+      "history": [{"message": "Why does payment value differ from merchandise plus freight?", "domain": "olist_retail"}],
+      "message": "Explain it in more detail.",
+      "expect": {"followup": true, "metric_id": "payment_reconciliation_explanation", "result_path": "result.business_cause_established", "result": false, "answer_contains": "does not establish why"},
+      "measures": ["followup_intent", "metric_preservation"]
+    },
+    {
+      "id": "generic_ranking_change",
+      "domain": "generic_csv",
+      "history": [{"message": "What is the sum of amount by region?", "file_key": "sales"}],
+      "message": "Make it top two.",
+      "expect": {"followup": true, "metric_id": "amount", "ranking_n": 2, "result_length": 2},
+      "measures": ["followup_intent", "metric_preservation", "ranking_modification"]
+    },
+    {
+      "id": "generic_filter_addition",
+      "domain": "generic_csv",
+      "history": [{"message": "What is the sum of amount?", "file_key": "sales"}],
+      "message": "Only amount above 5.",
+      "expect": {"followup": true, "metric_id": "amount", "filters": [{"column": "amount", "operator": "gt", "value": "5"}], "result_path": "rows_matched", "result": 2},
+      "measures": ["followup_intent", "metric_preservation", "filter_preservation"]
+    },
+    {
+      "id": "generic_result_comparison",
+      "domain": "generic_csv",
+      "history": [
+        {"message": "What is the sum of amount?", "file_key": "sales"},
+        {"message": "Only amount above 5."}
+      ],
+      "message": "Compare both.",
+      "expect": {"followup": true, "metric_id": "amount", "result_path": "difference", "result": "-6.50"},
+      "measures": ["followup_intent", "metric_preservation"]
+    },
+    {
+      "id": "independent_metric_change",
+      "domain": "olist_retail",
+      "history": [{"message": "What was the merchandise value in October 2017?", "domain": "olist_retail"}],
+      "message": "What is the on-time delivery percentage?",
+      "expect": {"followup": false, "metric_id": "on_time_delivery_percentage"},
+      "measures": ["followup_intent", "metric_preservation"]
+    },
+    {
+      "id": "ambiguous_reference",
+      "domain": "olist_retail",
+      "history": [{"message": "Show the top five categories by merchandise value.", "domain": "olist_retail"}],
+      "message": "What about the other one?",
+      "expect": {"clarification_required": true, "context_updated": false},
+      "measures": ["ambiguity_detection", "context_integrity"]
+    },
+    {
+      "id": "missing_previous_context",
+      "domain": null,
+      "history": [],
+      "message": "What about November?",
+      "expect": {"clarification_required": true, "context_updated": false},
+      "measures": ["ambiguity_detection", "context_integrity"]
+    },
+    {
+      "id": "unrelated_greeting",
+      "domain": "generic_csv",
+      "history": [{"message": "What is the sum of amount?", "file_key": "sales"}],
+      "message": "Thanks!",
+      "expect": {"intent": "unrelated", "context_updated": false, "preserve_context": true},
+      "measures": ["unrelated_message", "context_integrity"]
+    },
+    {
+      "id": "dataset_change",
+      "domain": "generic_csv",
+      "history": [{"message": "What is the sum of amount?", "file_key": "sales"}],
+      "message": "How many rows?",
+      "file_key": "sales_alt",
+      "expect": {"followup": false, "metric_id": "rows", "active_file_key": "sales_alt", "result_path": "value", "result": 2},
+      "measures": ["followup_intent", "context_integrity"]
+    },
+    {
+      "id": "failed_query_does_not_corrupt_context",
+      "domain": "generic_csv",
+      "history": [{"message": "What is the sum of amount?", "file_key": "sales"}],
+      "message": "Sum missing_measure.",
+      "expect": {"error_code": "UNSUPPORTED_QUESTION", "context_updated": false, "preserve_context": true},
+      "measures": ["context_integrity"]
+    }
+  ]
+}
