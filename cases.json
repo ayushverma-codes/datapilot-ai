@@ -1,0 +1,46 @@
+{
+  "cases": [
+    {
+      "id": "sales-products-and-conversation",
+      "files": ["examples/assessment_sales.csv", "examples/assessment_products.csv"],
+      "retail": [
+        {
+          "file_index": 0,
+          "join": {
+            "right_file_index": 1,
+            "left_keys": ["sku"],
+            "right_keys": ["product_code"],
+            "cardinality": "many_to_one"
+          },
+          "request": {"fields": {"revenue": {"column": "revenue"}, "category": {"side": "right", "column": "category"}}},
+          "expected_metrics": {
+            "total_revenue": {"value": "37"},
+            "category_performance": {"value": [
+              {"group": "Clothing", "revenue": "27", "records": 2},
+              {"group": "Tools", "revenue": "10", "records": 1}
+            ]},
+            "return_rate": {"status": "UNSUPPORTED", "value": null}
+          }
+        },
+        {
+          "file_index": 1,
+          "request": {"fields": {"on_hand": {"column": "on_hand"}}},
+          "expected_metrics": {"stock_out_frequency": {"value": "50.0000"}}
+        }
+      ],
+      "chat": [
+        {"question": "Show revenue by region", "file_index": 0, "expected_value": "37"},
+        {"question": "Filter to West", "expected_value": "30"},
+        {"question": "Now show average revenue", "expected_value": "15"},
+        {"question": "What about the other one?", "expected_status": "NEEDS_CLARIFICATION"}
+      ]
+    },
+    {
+      "id": "approval-policy-and-validation",
+      "files": ["examples/measurements.csv", "examples/teams.csv"],
+      "approve_operations": ["convert_numeric", "parse_dates"],
+      "reject_operations": ["category_normalization"],
+      "chat": [{"question": "Sum reading", "file_index": 0, "expected_value": "33.25"}]
+    }
+  ]
+}

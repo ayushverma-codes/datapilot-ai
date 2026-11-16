@@ -3,11 +3,12 @@ import argparse
 import json
 from pathlib import Path
 from typing import Literal
-from pydantic import Field
+from pydantic import Field, JsonValue
 from app.config import Settings
 from app.conversation.analysis_contracts import AnalyticalQuestion
 from app.conversation.memory import ConversationService
 from app.models.contracts import Contract, PipelineError
+from app.retail_contracts import Metric, MetricsRequest, RelationshipRequest
 from app.services.assistant_service import AssistantService
 from app.services.ingestion_service import IngestionService
 from app.services.retail_service import RetailService
@@ -23,6 +24,26 @@ class ChatCase(Contract):
     expected_value: str | int | None = None
 
 
+class RetailJoin(Contract):
+    right_file_index: int = Field(ge=0)
+    left_keys: list[str] = Field(min_length=1, max_length=5)
+    right_keys: list[str] = Field(min_length=1, max_length=5)
+    join_type: Literal['left', 'inner'] = 'left'
+    cardinality: Literal['one_to_one', 'many_to_one', 'one_to_many']
+
+
+class ExpectedMetric(Contract):
+    status: Literal['OK', 'UNSUPPORTED'] = 'OK'
+    value: JsonValue
+
+
+class RetailCheck(Contract):
+    file_index: int = Field(ge=0)
+    join: RetailJoin | None = None
+    request: dict[str, JsonValue] = Field(default_factory=dict)
+    expected_metrics: dict[Metric, ExpectedMetric] = Field(min_length=1, max_length=9)
+
+
 class Case(Contract):
     id: str = Field(min_length=1, max_length=200)
     files: list[str] = Field(min_length=1)
@@ -31,6 +52,7 @@ class Case(Contract):
     approve_operations: list[str] = Field(default_factory=list)
     reject_operations: list[str] = Field(default_factory=list)
     chat: list[ChatCase] = Field(default_factory=list, max_length=50)
+    retail: list[RetailCheck] = Field(default_factory=list, max_length=20)
 
 
 def case_error(exc):
@@ -58,6 +80,46 @@ def prepare_files(case, directory, settings):
     return files
 
 
+def case_file_id(report, index):
+    if index >= len(report['files']):
+        raise PipelineError('INVALID_FILE_INDEX', 'Reference is outside the evaluation case')
+    return report['files'][index]['file_id']
+
+
+def run_retail(case, report, retail):
+    results = []
+    for check in case.retail:
+        relationship = None
+        computed = None
+        error = None
+        try:
+            if check.request.keys() & {'file_id', 'relationship_id', 'metrics'}:
+                raise PipelineError('INVALID_RETAIL_CASE', 'Use case file indices and expected metric names')
+            left = case_file_id(report, check.file_index)
+            relationship_id = None
+            if check.join:
+                right = case_file_id(report, check.join.right_file_index)
+                request = RelationshipRequest(left_file_id=left, right_file_id=right,
+                                              **check.join.model_dump(exclude={'right_file_index'}))
+                relationship = retail.register(USER, request)
+                relationship_id = relationship['relationship_id']
+            request = MetricsRequest.model_validate({
+                **check.request, 'file_id': left, 'relationship_id': relationship_id,
+                'metrics': list(check.expected_metrics),
+            })
+            computed = retail.metrics(USER, request)
+        except Exception as exc:
+            error = case_error(exc)
+        metrics = computed['metrics'] if computed else {}
+        passed = error is None and all(
+            name in metrics and metrics[name]['status'] == expected.status and metrics[name]['value'] == expected.value
+            for name, expected in check.expected_metrics.items()
+        )
+        results.append({'check': check.model_dump(mode='json'), 'passed': passed, 'relationship': relationship,
+                        'result': computed, 'error': error})
+    return results
+
+
 def run_chat(case, report, assistant):
     if not case.chat:
         return []
@@ -71,9 +133,7 @@ def run_chat(case, report, assistant):
             selected = turn.file_index if turn.file_index is not None else (0 if index == 0 else None)
             datasets = []
             if selected is not None:
-                if selected >= len(report['files']):
-                    raise PipelineError('INVALID_FILE_INDEX', 'Chat references a file outside the evaluation case')
-                datasets = [{'file_id': report['files'][selected]['file_id']}]
+                datasets = [{'file_id': case_file_id(report, selected)}]
             output = assistant.analyze(USER, AnalyticalQuestion(
                 question=turn.question, conversation_id=cid, datasets=datasets))
             trace_id = output['trace_id']
@@ -148,9 +208,11 @@ def evaluate(input_path, output_path, artifacts_dir):
                 entries = report['files']
                 profiles, artifacts = zip(*(file_evidence(service, entry) for entry in entries))
                 chat = run_chat(case, report, assistant)
+                retail = run_retail(case, report, assistant.retail)
                 success = (not failures and all(f['status'] != 'FAILED' and f['validation'] and
                                                 f['validation']['passed'] for f in entries)
-                           and all(turn['passed'] for turn in chat))
+                           and all(turn['passed'] for turn in chat)
+                           and all(check['passed'] for check in retail))
                 results.append({'id': case.id, 'success': success, 'report': report,
                                 'dataset': [source for source in run['files']],
                                 'profile_before': [f['profile'] for f in entries],
@@ -158,7 +220,7 @@ def evaluate(input_path, output_path, artifacts_dir):
                                 'cleaning_plan': [f['plan'] for f in entries],
                                 'profile_after': list(profiles),
                                 'validation': [f['validation'] for f in entries],
-                                'chat_evaluation': chat, 'file_errors': failures,
+                                'chat_evaluation': chat, 'retail_evaluation': retail, 'file_errors': failures,
                                 'artifacts': {'root': 'artifacts-dir', 'metadata': 'metadata.db',
                                               'files': list(artifacts)}})
             except Exception as exc:
