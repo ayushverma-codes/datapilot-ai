@@ -1,9 +1,11 @@
+import asyncio
 import hashlib
 import hmac
 import logging
 from contextlib import asynccontextmanager
 from typing import Any
 from fastapi import APIRouter, Depends, FastAPI, File, Form, Header, Query, Request, UploadFile
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.routing import APIRoute
 from fastapi.security import HTTPBearer
@@ -31,28 +33,58 @@ class Proposal(Contract):
     reason: str = Field(min_length=1, max_length=2000)
 
 
-class BodyLimit:
-    """Enforce a streaming request limit before the multipart parser consumes the body."""
-    def __init__(self, app, limit):
-        self.app, self.limit = app, limit
+class RequestGuard:
+    """Authenticate before reading protected bodies and bound bytes and receive time."""
+    def __init__(self, app, settings):
+        self.app, self.settings = app, settings
+
+    def principal(self, authorization):
+        if authorization.startswith(b'Bearer '):
+            token = authorization[7:]
+            for configured, user in self.settings.api_tokens.items():
+                if hmac.compare_digest(token, configured.encode('utf-8')):
+                    return user
+        if self.settings.dev_mode and not authorization:
+            return 'local-development-user'
+        return None
 
     async def __call__(self, scope, receive, send):
         if scope['type'] != 'http':
             return await self.app(scope, receive, send)
         headers = dict(scope.get('headers', []))
+        if scope['path'] == '/api/v1' or scope['path'].startswith('/api/v1/'):
+            user = self.principal(headers.get(b'authorization', b''))
+            if user is None:
+                response = JSONResponse(status_code=401, headers={'WWW-Authenticate': 'Bearer'},
+                    content={'error': {'code': 'UNAUTHORIZED', 'message': 'A configured bearer token is required', 'details': {}}})
+                return await response(scope, receive, send)
+            scope.setdefault('state', {})['principal'] = user
+        if scope['method'] not in {'POST', 'PUT', 'PATCH'}:
+            return await self.app(scope, receive, send)
         try:
             declared = int(headers.get(b'content-length', b'0'))
         except ValueError:
             declared = 0
-        if declared > self.limit:
+        if declared > self.settings.max_request_bytes:
             response = JSONResponse(status_code=413, content={'error': {'code': 'REQUEST_TOO_LARGE', 'message': 'Request exceeds configured byte limit', 'details': {}}})
             return await response(scope, receive, send)
         consumed = 0
+        received_body = False
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + self.settings.body_timeout
+
         async def limited_receive():
-            nonlocal consumed
-            message = await receive()
+            nonlocal consumed, received_body
+            if received_body:
+                return await receive()
+            try:
+                message = await asyncio.wait_for(receive(), max(0, deadline - loop.time()))
+            except TimeoutError as exc:
+                raise HTTPException(408, detail={'code': 'REQUEST_TIMEOUT',
+                    'message': 'Request body did not arrive within the configured deadline', 'details': {}}) from exc
             consumed += len(message.get('body', b''))
-            if consumed > self.limit:
+            received_body = not message.get('more_body', False)
+            if consumed > self.settings.max_request_bytes:
                 raise HTTPException(413, detail={'code': 'REQUEST_TOO_LARGE', 'message': 'Request exceeds configured byte limit', 'details': {}})
             return message
         try:
@@ -66,15 +98,18 @@ class UploadRoute(APIRoute):
         handler = super().get_route_handler()
 
         async def handle(request):
-            # Cache the parsed form for FastAPI while letting BodyLimit bound the request.
+            # Cache the parsed form for FastAPI while RequestGuard bounds the stream.
+            limit = request.app.state.service.settings.max_multipart_parts
             try:
-                await request.form(max_files=float('inf'), max_fields=float('inf'))
+                form = await request.form(max_files=limit, max_fields=limit)
             except (HTTPException, PipelineError):
                 raise
             except Exception as exc:
                 raise HTTPException(400, detail='There was an error parsing the body') from exc
-            return await handler(request)
-
+            try:
+                return await handler(request)
+            finally:
+                await form.close()
         return handle
 
 
@@ -93,7 +128,7 @@ def create_app(settings=None):
     api = FastAPI(title='Generic Data Ingestion & Cleaning', version='1.0.0', lifespan=lifespan)
     api.state.service = service
     api.state.conversations = conversations
-    api.add_middleware(BodyLimit, limit=settings.max_request_bytes)
+    api.add_middleware(RequestGuard, settings=settings)
 
     @api.exception_handler(PipelineError)
     async def pipeline_error(request, exc):
@@ -102,20 +137,25 @@ def create_app(settings=None):
     @api.exception_handler(HTTPException)
     async def http_error(request, exc):
         detail = exc.detail if isinstance(exc.detail, dict) else {'code': 'HTTP_ERROR', 'message': str(exc.detail), 'details': {}}
-        return JSONResponse(status_code=exc.status_code, content={'error': detail})
+        return JSONResponse(status_code=exc.status_code, headers=exc.headers, content={'error': detail})
+
+    @api.exception_handler(RequestValidationError)
+    async def invalid_request(request, exc):
+        errors = exc.errors()
+        code = 'INVALID_JSON' if any(item['type'] == 'json_invalid' for item in errors) else 'INVALID_REQUEST'
+        return JSONResponse(status_code=422, content={'error': {'code': code,
+            'message': 'Request did not match the API contract', 'details': {'error_count': len(errors)}}})
+
+    @api.exception_handler(Exception)
+    async def unexpected_error(request, exc):
+        logging.getLogger(__name__).error('unhandled_api_error type=%s', type(exc).__name__)
+        return JSONResponse(status_code=500, content={'error': {'code': 'INTERNAL_ERROR',
+            'message': 'The request could not be completed', 'details': {}}})
 
     bearer = HTTPBearer(auto_error=False, description='Enter the configured DataPilot API token.')
 
     def identity(request: Request, credentials=Depends(bearer)):
-        authorization = request.headers.get('authorization')
-        if credentials and authorization and authorization.startswith('Bearer '):
-            token = credentials.credentials
-            for configured, user in settings.api_tokens.items():
-                if hmac.compare_digest(token, configured):
-                    return user
-        if settings.dev_mode and not authorization:
-            return 'local-development-user'
-        raise PipelineError('UNAUTHORIZED', 'A configured bearer token is required', 401)
+        return request.state.principal
 
     @api.get('/health')
     def health():

@@ -1,6 +1,18 @@
 {
   "cases": [
-    {"id": "different-schemas", "files": ["measurements.csv", "teams.csv"], "approve_operations": ["convert_numeric", "parse_dates"], "reject_operations": ["category_normalization"]},
+    {
+      "id": "different-schemas",
+      "files": ["measurements.csv", "teams.csv"],
+      "approve_operations": ["convert_numeric", "parse_dates"],
+      "reject_operations": ["category_normalization"],
+      "chat": [
+        {"question": "Sum reading", "file_index": 0, "expected_value": "33.25"},
+        {"question": "Only where reading > 11", "expected_value": "12.25"},
+        {"question": "Clear all filters", "expected_value": "33.25"},
+        {"question": "How many rows", "file_index": 1, "expected_value": 3},
+        {"question": "Summarize the other one", "expected_status": "NEEDS_CLARIFICATION"}
+      ]
+    },
     {"id": "safe-only", "files": ["teams.csv"]}
   ]
 }

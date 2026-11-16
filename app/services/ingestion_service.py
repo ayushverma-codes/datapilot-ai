@@ -398,14 +398,14 @@ class IngestionService:
                 self.refresh_run(session, file.run_id)
                 session.commit()
                 return report
-            except Exception:
+            except Exception as exc:
                 session.rollback()
                 file = session.get(UploadedFile, file_id)
                 file.status = 'FAILED'
                 file.error = {'code': 'EXECUTION_ERROR', 'message': 'Cleaning failed; original data remains preserved', 'details': {}}
                 self.refresh_run(session, file.run_id)
                 session.commit()
-                logger.exception('cleaning_failed file=%s', file_id)
+                logger.error('cleaning_failed file=%s error_type=%s', file_id, type(exc).__name__)
                 raise PipelineError('EXECUTION_ERROR', 'Cleaning failed; original data remains preserved', 500)
 
     def recover(self, user, file_id):
