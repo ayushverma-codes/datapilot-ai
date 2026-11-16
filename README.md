@@ -14,7 +14,7 @@ DataPilot AI is a FastAPI backend for the Naukr.AI **AI Retail Data & Conversati
 | LLM | Optional, **off by default**. Any OpenAI-compatible `/chat/completions` endpoint. Groq `openai/gpt-oss-120b` and `qwen/qwen3.8-27b` were used in development checks. |
 | Works with no paid service | Yes. The batch evaluator forces AI off; the chat assistant has a deterministic rule fallback. |
 | Automated tests | 139 test functions (199 collected cases per the repo's verification reports). Not re-executed for this README; see [Testing](#13-testing-and-verified-results). |
-| Walkthrough video | **Not yet recorded** (no link exists in the repo). |
+| Walkthrough video | https://youtu.be/Grb83ZlaaxY |
 
 ---
 
@@ -36,8 +36,6 @@ DataPilot AI is a FastAPI backend for the Naukr.AI **AI Retail Data & Conversati
 14. [Project structure and code quality](#14-project-structure-and-code-quality)
 15. [Design decisions and trade-offs](#15-design-decisions-and-trade-offs)
 16. [Limitations and future work](#16-limitations-and-future-work)
-17. [Walkthrough script](#17-walkthrough-script-35-minutes)
-18. [Documentation gaps and unverifiable items](#18-documentation-gaps-and-unverifiable-items)
 
 ---
 
@@ -776,34 +774,3 @@ Known quality debt: [retail_bi.py](app/retail_bi.py), the older `ConversationSer
 **Future work:** retail scoring with explicit, documented signals and missing-evidence reporting; an approved alias registry for category/SKU/store normalization; a worker queue with job status endpoints; streaming/chunked profiling; live-model evaluation with a fixed question set and recorded false-clarification and refusal rates; a minimal UI for plan review and trace inspection.
 
 ---
-
-## 17. Walkthrough script (3–5 minutes)
-
-The recording does not exist yet. This script covers the PDF's required items using only committed samples:
-
-1. **Cleaning run (≈1 min).** Upload `examples/teams.csv`. Show the original profile and issues, then clean. Show 3 rows before and after, trimmed whitespace, validation `passed`, `idempotent: true`, and the unchanged raw artifact.
-2. **Ambiguous decision (≈30 s).** Show the medium-risk `category_normalization` step for `Blue`/`blue` in `AWAITING_APPROVAL`; reject it with a reason and show the approval history. Both values remain.
-3. **Retail feature (≈1 min).** Register `sku → product_code` (many-to-one) for the sales and products samples. Show Clothing 27, Tools 10, total 37, stock-outs 50%, and `return_rate` `UNSUPPORTED` with missing evidence. Optionally show a many-to-many join refused.
-4. **Multi-turn chat (≈1.5 min).** `Show revenue by region` (37) → `Filter to West` (30) → `Now show average revenue` (15). Open a trace to show validated plan, columns, filters, rows considered and the cleaned-artifact checksum.
-5. **Failure and recovery (≈1 min).** Request `revision: 2` for a revision-1 file → 409 `DATASET_VERSION_CONFLICT`, trace `NOT_STARTED`; send `Continue` in the same conversation and show 15. Mention the mock-transport outage test (`test_ai_unavailable_exact_fallback_preserves_filter`) for the model-failure path.
-6. **Batch (≈30 s).** Run the evaluator command and show `2` cases passed.
-
----
-
-## 18. Documentation gaps and unverifiable items
-
-These were identified while cross-checking this README against the assessment PDF and the repository. Nothing was executed for this documentation pass.
-
-| Item | Why it is unverified or missing |
-| --- | --- |
-| Commit history and clean-clone setup | The supplied ZIP has no `.git` directory. The reports mention commits (`46afd54`, `b888e83`) that cannot be inspected here |
-| Test and evaluator results | Quoted from the repository's reports (Windows, Python 3.14.7). Not re-run on this environment; Linux/macOS commands in §4 are direct translations that the reports do not attest |
-| curl examples in §6.2 | Checked against route and contract definitions; expected values come from the reports and `cases.json`; not executed |
-| Live-model behaviour | Reports describe live Groq checks on synthetic data. No transcripts are in the repository, and the automated suite uses mocks only |
-| 100k+ row handling | Limits exist (200,000 rows default); the largest ingestion test uses 12,000 rows. No documented run on a 100k+ row upload through the full pipeline |
-| Re-cleaning a cleaned file as a new upload | The validator replays steps on the output, but a dedicated re-upload test was not located |
-| Walkthrough video | Not recorded; no link in the repository |
-| Recommendation explorer, conversion, sell-through, inventory ageing, background jobs, UI | Not implemented |
-| Header-only and all-null CSV edge cases | Code paths exist (`empty_column` rule, empty-dataset handling, `test_empty_cleaned_dataset_can_answer_row_count`); a dedicated all-null-column test was not confirmed |
-
-Supporting evidence in this repository: [Reports/FINAL_ASSESSMENT_GAP_AUDIT.md](Reports/FINAL_ASSESSMENT_GAP_AUDIT.md), [Reports/FINAL_ASSESSMENT_VERIFICATION_REPORT.md](Reports/FINAL_ASSESSMENT_VERIFICATION_REPORT.md), [Reports/ASSESSMENT_EXAMPLE_VALIDATION.md](Reports/ASSESSMENT_EXAMPLE_VALIDATION.md) and the per-module `Reports/MODULE_*_COMPLETION_REPORT.md` files.
