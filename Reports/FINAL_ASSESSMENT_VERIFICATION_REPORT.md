@@ -2,20 +2,22 @@
 
 ## Readiness
 
-The **assessment candidate is ready for review**. The published `main` independently passed its original 197 tests from a fresh network clone. The candidate closes the missing joined-retail batch evaluation path and adds a reproducible assessment README. Candidate results do not describe features already published on GitHub. No commit or push was performed.
+The original readiness pass reproduced 197 tests from a fresh network clone at `46afd54`, then verified the joined-retail batch addition. Local tracked baseline `b888e83` contains that addition. The current pass updates scoring and examples and independently reproduces 199 tests. No commit or push was performed for the current pass.
 
-The supplied A–H sections allocate 90 of the stated 100 points. These are rubric weights, not awarded scores. This report does not invent the missing 10 points or predict an exact assessment score.
+The nine official weights below were checked against page 5 of the assignment PDF and total 100. They are rubric weights, not awarded or predicted scores.
 
-| Area | Official points | Independently verified evidence | Status and remaining boundary |
-| --- | ---: | --- | --- |
-| A. Data profiling and cleaning | 18 | Full ingestion/profile/validation suites and live original/cleaned profiles, plan, downloaded data and raw checksum; coverage includes malformed and header-only files, all-null columns, mixed types, duplicate identifiers and idempotency | Verified. Inputs must satisfy configured bounds. |
-| B. Retail intelligence | 14 | Normalization API, exact approved mapping tests, pinned explicit relationship tests, live category and stock/missing-data evaluation, complete Olist comparison | Verified for three alternatives. No recommendation explorer. |
-| C. Conversational assistant | 20 | Full intent and memory tests; live 37 → 30 → 15 multi-turn computation, clarification, missing return inputs, joined retail trace and revision/ownership refusals | Verified for supported intents. Offline grammar is narrower than provider-assisted planning. |
-| D. Safe plan execution and AI Engineering | 12 | Local controlled provider for joined retail questions, structured plan and source evidence; invalid JSON and outage retry/fallback; unsafe plan rejected with 422 and no execution; mock timeout and prompt-injection cases in suite | Verified for implemented orchestrator. External provider availability and quality were not measured in this audit. |
-| E. Batch and reliability | 10 | Official command passed 2/2 cases, 5/5 chat checks and 2/2 retail checks. Tests verify join fan-out/failed-case isolation, deterministic values and artifact/trace evidence | Verified in candidate. This additional retail case support is not in the published baseline. |
-| F. Security and privacy | 6 | Ownership across file, trace and session tests; live foreign owner 404, validated instructions and revisions; provider payload checks and current security suite | Verified for stated application boundaries. Static secrets, local SQLite, no built-in TLS or rate limiting, and heuristic opt-in sample redaction. |
-| G. Automated tests | 5 | Published baseline 197 passed, candidate 199 passed. Two new evaluator tests; no existing assertion weakened | Verified. One existing Starlette TestClient deprecation warning in each environment. |
-| H. Documentation and reasoning | 5 | Complete assessment README, exact official command, Mermaid architecture, provider/data sharing boundaries, metrics, test references, setup and walkthrough | Verified for documented paths and scope; Swagger HTML/schema checked by HTTP. |
+| Assessment category | Points | Implemented functionality | Source evidence | Test/evaluation evidence | Status |
+| --- | ---: | --- | --- | --- | --- |
+| Data profiling + cleaning correctness | 18 | Profiles CSVs and detects issues before an approval plan; validates row/schema deltas and keeps original bytes. | [ingestion_service.py](../app/services/ingestion_service.py) | [Evidence](../tests/test_cleaning.py) | Verified. Pending mappings are skipped; validation does not infer business meaning. |
+| Retail-domain intelligence | 14 | Implements normalization, explicit safe relationships, and sales/inventory metrics. | [retail_engine.py](../app/retail_engine.py) | [Evidence](../tests/test_retail_uploaded.py) | Verified. No recommendation explorer; missing inputs return evidence instead of estimates. |
+| Chat assistant grounding + multi-turn reasoning | 20 | Uses scoped dataset versions, computed answers and persisted conversation traces; continues filters across turns. | [assistant_service.py](../app/services/assistant_service.py) | [Evidence](../tests/test_module6_memory.py) | Verified for supported intents. Offline wording is narrower than model-assisted planning. |
+| Safe plan execution + AI engineering | 12 | Validates typed plans, orchestrates deterministic tools, and bounds provider retries and fallbacks. | [analysis_contracts.py](../app/conversation/analysis_contracts.py) | [Evidence](../tests/test_assistant_analysis.py) | Verified with mock providers and offline tests; no external provider quality claim. |
+| Batch evaluator + reliability | 10 | Runs cleaning, joined retail and chat through production services and continues after failed cases. | [evaluate.py](../app/evaluate.py) | [Evidence](../tests/test_assessment_batch.py) | Verified. IDs and timestamps differ between runs. |
+| Architecture + code quality | 10 | Separates API, services, contracts, deterministic engines and persistence. API and batch reuse services; structured errors cross the boundary. | [main.py](../app/main.py) | [Evidence](../tests/test_api_evaluation.py) | Verified design paths. In-process processing and single-worker SQLite limit concurrency. |
+| Security / privacy / data isolation | 6 | Authenticates before body parsing, enforces ownership and input/query limits, and minimizes model payloads. | [analysis_planner.py](../app/conversation/analysis_planner.py) | [Evidence](../tests/test_module7_reliability.py) | Verified for local deployment. Static tokens and heuristic opt-in sample redaction. |
+| Automated tests | 5 | Covers profiling, mutations, integrity, safe joins, chat context, refusals and provider failure. | [conftest.py](../tests/conftest.py) | [Evidence](../tests/) | Verified. No production load or security certification. |
+| README + technical reasoning | 5 | Documents setup, validated examples, AI boundaries and trade-offs. | [README.md](../README.md) | [Evidence](../Reports/ASSESSMENT_EXAMPLE_VALIDATION.md) | Verified walkthrough commands and local links. The video is a separate submission item. |
+| **TOTAL** | **100** | | | | |
 
 ## Source provenance and artifacts
 
@@ -23,7 +25,7 @@ The supplied A–H sections allocate 90 of the stated 100 points. These are rubr
 
 All seven Olist Git blobs matched the historical SHA-256 manifest exactly. The first working-copy hash check flagged CRLF checkout conversion on Windows. A binary Git blob check and a newline-normalized comparison verified that only the working-tree line endings differed. No accepted fixture was rewritten. The freshly recomputed enriched Olist JSON matched the accepted report in full, including source counts, category distributions, delivered merchandise, freight and payments. The checkout includes all fixtures required by the Olist reports and tests; external raw downloads are unnecessary.
 
-## Changes and tests
+## Previous assessment release changes and tests
 
 - `app/evaluate.py` is the only runtime source update. Opt-in retail checks resolve indices within the current case, validate declarations through the production relationship contract, call the existing retail metric service, and capture statuses, exact expected values, errors and versioned evidence. Failed retail checks do not abort later checks or cases.
 - The root `cases.json` makes the exact assessment command usable and combines two small synthetic retail CSVs with existing examples. The prior `examples/cases.json` is untouched.
@@ -91,3 +93,17 @@ The eight approved files, including the shorter presentation README, were copied
 | Live README workflow | Uvicorn and Swagger schema, authenticated upload, profiling, clean download, raw byte preservation, joined category revenue 27 and 10, explicit missing return metric, owner isolation, and verified conversational values 37 → 30 → 15. |
 
 The full-suite JUnit report is in `evaluation_output/assessment-release-75c8ce9b/tests.xml`, the evaluator output is under `evaluation_output/assessment-eval-4d0d5b80/`, and the live log is under `evaluation_output/assessment-http-d6924c1e/`. These local evidence files are ignored. No commit or push was made.
+
+## Current rubric and walkthrough correction
+
+The original assignment PDF (DQ-AI-CHAT-03, pages 2–5) confirms a separate **10-point Architecture + code quality** category. The README and assessment reports now include it. See the [gap audit](FINAL_ASSESSMENT_GAP_AUDIT.md) for the application/service, contracts and persistence rationale, and [example validation](ASSESSMENT_EXAMPLE_VALIDATION.md) for the current run and concrete Swagger workflow. This correction changes documentation only. The existing implementation, tests and accepted Olist fixtures were reused.
+
+| Current validation | Result |
+| --- | --- |
+| Full suite | **199 passed**, zero failures or skips, one existing Starlette TestClient deprecation warning, 146.43 s. |
+| Targeted examples | **67 passed** for cleaning, retail, assistant, memory and batch; **2 passed** for Olist; **1 passed** for mocked provider outage. These selections overlap the full suite. |
+| Batch and conversation | **2/2 batch cases, 5/5 chat checks, 2/2 retail checks, 13/13 conversation scenarios**; entire recomputed Olist JSON matched. |
+| Setup and API | README environment loader, Uvicorn startup on port 8000, health, Swagger HTML and OpenAPI verified. Authenticated examples asserted against the production handlers. |
+| Documentation | Exact nine-row 100-point matrices, local Markdown links, heading anchors and Mermaid flowchart syntax checked. |
+
+The initial targeted run hit Windows permissions errors when pytest used its default temporary directory. A retry using fresh workspace-local `--basetemp` paths passed. The README uses that working command. The current pass did not alter application code or tests.

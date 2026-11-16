@@ -6,3 +6,4 @@ data/
 evaluation_output/
 *.db
 DECISION.md
+.pytest_cache/
