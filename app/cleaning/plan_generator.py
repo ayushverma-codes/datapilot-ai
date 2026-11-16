@@ -35,7 +35,8 @@ def generate_plan(file_id, profile, issues, suggestions, overrides=None):
         if issue.category == 'potential_outliers':
             add('flag_outliers', [issue.column], {}, 'Statistical outliers may be legitimate; retain values', issue_ids=[issue.id])
         if issue.category == 'case_inconsistency':
-            mapping = {v: group[0] for group in issue.evidence for v in group if v != group[0]}
+            mapping = {v: group[0] for group in issue.evidence if all(len(value) < 200 for value in group)
+                       for v in group if v != group[0]}
             if mapping:
                 add('category_normalization', [issue.column], {'mapping': mapping}, 'Review possible case-equivalent categories', issue_ids=[issue.id])
     for suggestion in suggestions:

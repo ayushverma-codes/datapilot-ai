@@ -9,10 +9,10 @@ from sqlalchemy.exc import IntegrityError
 from app.storage.database import (database, User, IngestionRun, UploadedFile, SchemaProfile, ColumnProfile,
                                   DataQualityIssue, CleaningPlan, CleaningStep, Approval, ExecutionLog, ValidationReport)
 from app.storage.file_storage import FileStorage
-from app.models.contracts import PipelineError, Step, Issue
+from app.models.contracts import PipelineError, Step
 from app.ingestion.csv_reader import validate_file, read_csv
 from app.profiling.profile_generator import generate_profile
-from app.quality.rule_engine import detect
+from app.quality.rule_engine import detect, make_issue
 from app.ai.analyzer import analyze
 from app.cleaning.plan_generator import generate_plan
 from app.cleaning.executor import execute_step
@@ -61,7 +61,10 @@ class IngestionService:
         return run
 
     def save_profile(self, session, user, file, profile, kind):
-        record = SchemaProfile(id=uid(), file_id=file.id, kind=kind, payload=profile)
+        profile_id = uid()
+        profile = {**profile, 'profile_id': profile_id, 'run_id': file.run_id, 'file_id': file.id,
+                   'kind': kind, 'revision': 0 if kind == 'original' else file.revision + 1}
+        record = SchemaProfile(id=profile_id, file_id=file.id, kind=kind, payload=profile)
         session.add(record)
         session.flush()
         for column in profile['columns']:
@@ -147,8 +150,8 @@ class IngestionService:
                     file.error = exc.as_dict() if isinstance(exc, PipelineError) else {'code': 'PROCESSING_ERROR', 'message': 'File processing failed', 'details': {}}
                     logger.warning('file_processing_failed file=%s error_type=%s', file.id, type(exc).__name__)
                     if isinstance(exc, PipelineError) and exc.code == 'MALFORMED_CSV':
-                        issue = Issue(id=uid(), file_id=file.id, run_id=run.id, category='malformed_records', description=exc.message,
-                                      severity='error', affected_count=1, affected_percentage=0, evidence=[exc.details])
+                        issue = make_issue(run.id, file.id, None, 'malformed_records', 1, None,
+                                           [exc.details], 'review', description=exc.message, severity='error')
                         session.add(DataQualityIssue(id=issue.id, file_id=file.id, payload=issue.model_dump()))
                     session.commit()
             self.refresh_run(session, run.id)
@@ -192,11 +195,13 @@ class IngestionService:
 
     def get_profile(self, user, file_id, kind='original'):
         with self.sessions() as session:
-            self.owned_file(session, user, file_id)
+            file = self.owned_file(session, user, file_id)
             result = session.scalar(select(SchemaProfile).where(SchemaProfile.file_id == file_id, SchemaProfile.kind == kind).order_by(SchemaProfile.created_at.desc()))
             if not result:
                 raise PipelineError('NOT_READY', 'Profile is not available', 409)
-            return result.payload
+            return {'profile_id': result.id, 'run_id': file.run_id, 'file_id': file.id,
+                    'kind': result.kind, 'revision': 0 if result.kind == 'original' else file.revision,
+                    **result.payload}
 
     def get_issues(self, user, file_id):
         with self.sessions() as session:
@@ -335,7 +340,7 @@ class IngestionService:
                 raw = self.artifact(user, file, 'raw', file.id + '.csv').read_bytes()
                 if hashlib.sha256(raw).hexdigest() != file.checksum:
                     raise PipelineError('RAW_INTEGRITY_FAILURE', 'Original artifact checksum differs')
-                original, metadata = read_csv(raw, self.settings, file.metadata_json['delimiter'])
+                original, _ = read_csv(raw, self.settings, file.metadata_json['delimiter'])
                 working = original.copy()
                 before = self.get_profile(user, file_id)
                 logs, executed = [], []
@@ -355,11 +360,12 @@ class IngestionService:
                     logs.append(log)
                     executed.append(step)
                 content = working.to_csv(index=False, lineterminator='\n').encode('utf-8')
-                after = generate_profile(working, metadata, len(content))
+                # The output is a new CSV artifact with its own delimiter, encoding and headers.
+                roundtrip, cleaned_metadata = read_csv(content, self.settings, ',')
+                after = generate_profile(working, cleaned_metadata, len(content))
                 remaining = detect(after, file.run_id, file.id)
                 report = validate(before, after, original, working, executed, logs, remaining)
                 # Also verify exact CSV round trip before publishing.
-                roundtrip, _ = read_csv(content, self.settings, ',')
                 if not roundtrip.reset_index(drop=True).equals(working.reset_index(drop=True)):
                     report['passed'] = False
                     report['errors'].append('CSV_ROUNDTRIP_FAILURE')

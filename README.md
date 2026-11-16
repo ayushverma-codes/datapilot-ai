@@ -17,6 +17,7 @@ There is no frontend in this release. Use the API and its OpenAPI page at `/docs
 ## Reports
 
 - [Module 1 — Data ingestion and preprocessing](Reports/MODULE_1_COMPLETION_REPORT.md)
+- [Module 2 — Data profiling and quality assessment](Reports/MODULE_2_COMPLETION_REPORT.md)
 
 ## Architecture
 
